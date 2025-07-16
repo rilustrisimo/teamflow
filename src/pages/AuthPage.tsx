@@ -84,7 +84,7 @@ const AuthPage = () => {
         if (error) {
           setError(error.message || 'Failed to create account')
         } else {
-          setSuccess('Account created successfully! Please check your email to verify your account.')
+          setSuccess('Account created successfully! Redirecting to login...')
           // Clear form
           setFormData({
             email: '',
@@ -94,6 +94,11 @@ const AuthPage = () => {
             companyName: '',
             role: 'team-member'
           })
+          // Redirect to login after a short delay
+          setTimeout(() => {
+            setIsLogin(true)
+            setSuccess('')
+          }, 1500)
         }
       }
     } catch (err: any) {
