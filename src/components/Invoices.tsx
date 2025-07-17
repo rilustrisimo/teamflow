@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { useAppContext } from '../context/AppContext'
+import { EmailService } from '../lib/emailService'
 import { Plus, Send, Eye, Download, DollarSign, Calendar, User, FileText, Mail, Filter, MoreHorizontal, X } from 'lucide-react'
 
 interface Invoice {
@@ -36,6 +37,9 @@ const Invoices = () => {
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [showFiltered, setShowFiltered] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
 
   // Guard clause for null currentUser
   if (!currentUser) {
@@ -253,16 +257,35 @@ This invoice was generated automatically by TeamFlow.`
     setShowEmailPreview(true)
   }
 
-  const sendInvoice = () => {
+  const sendInvoice = async () => {
     if (!selectedInvoice) return
     
     try {
-      console.log('Sending invoice email:', {
-        to: selectedInvoice.clientEmail,
-        subject: emailSubject,
-        body: emailBody,
-        invoice: selectedInvoice
-      })
+      setLoading(true)
+      setError('')
+      setSuccess('')
+      
+      // Prepare invoice data for email
+      const invoiceData = {
+        clientEmail: selectedInvoice.clientEmail,
+        clientName: selectedInvoice.client,
+        invoiceNumber: selectedInvoice.id,
+        amount: selectedInvoice.amount,
+        dueDate: selectedInvoice.dueDate,
+        items: selectedInvoice.items.map(item => ({
+          description: item.description,
+          hours: item.hours,
+          rate: item.rate,
+          total: item.hours * item.rate
+        })),
+        dateRange: {
+          start: selectedInvoice.dateRange.start,
+          end: selectedInvoice.dateRange.end
+        }
+      }
+
+      // Send email using EmailService
+      await EmailService.sendInvoiceEmail(invoiceData)
       
       // Update invoice status to sent
       setInvoices(prev => prev.map(inv => 
@@ -271,10 +294,18 @@ This invoice was generated automatically by TeamFlow.`
       
       setShowEmailPreview(false)
       setSelectedInvoice(null)
-      alert('Invoice sent successfully!')
+      setSuccess('Invoice sent successfully!')
+      
+      // Clear success message after 5 seconds
+      setTimeout(() => setSuccess(''), 5000)
     } catch (error) {
       console.error('Error sending invoice:', error)
-      alert('Error sending invoice. Please try again.')
+      setError('Failed to send invoice. Please try again.')
+      
+      // Clear error message after 10 seconds
+      setTimeout(() => setError(''), 10000)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -346,6 +377,18 @@ This invoice was generated automatically by TeamFlow.`
           </button>
         )}
       </div>
+
+      {/* Success/Error Messages */}
+      {success && (
+        <div className="bg-green-500/20 border border-green-500/50 text-green-400 px-4 py-3 rounded-lg">
+          {success}
+        </div>
+      )}
+      {error && (
+        <div className="bg-red-500/20 border border-red-500/50 text-red-400 px-4 py-3 rounded-lg">
+          {error}
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -826,10 +869,11 @@ This invoice was generated automatically by TeamFlow.`
               </button>
               <button
                 onClick={sendInvoice}
-                className="flex items-center space-x-2 bg-secondary hover:bg-secondary/90 text-white font-semibold py-2 px-4 rounded-lg transition-all duration-200"
+                disabled={loading}
+                className="flex items-center space-x-2 bg-secondary hover:bg-secondary/90 disabled:bg-secondary/50 text-white font-semibold py-2 px-4 rounded-lg transition-all duration-200"
               >
                 <Mail className="w-4 h-4" />
-                <span>Send Invoice</span>
+                <span>{loading ? 'Sending...' : 'Send Invoice'}</span>
               </button>
             </div>
           </motion.div>

@@ -25,12 +25,36 @@
 -- Enable necessary extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- Create custom types
-CREATE TYPE user_role AS ENUM ('admin', 'manager', 'team-member', 'client');
-CREATE TYPE project_status AS ENUM ('active', 'completed', 'on-hold', 'cancelled');
-CREATE TYPE task_status AS ENUM ('todo', 'inprogress', 'review', 'done');
-CREATE TYPE task_priority AS ENUM ('low', 'medium', 'high');
-CREATE TYPE invoice_status AS ENUM ('draft', 'sent', 'paid', 'overdue', 'cancelled');
+-- Create custom types (only if they don't exist)
+DO $$ BEGIN
+  CREATE TYPE user_role AS ENUM ('admin', 'manager', 'team-member', 'client');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+  CREATE TYPE project_status AS ENUM ('active', 'completed', 'on-hold', 'cancelled');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+  CREATE TYPE task_status AS ENUM ('todo', 'inprogress', 'review', 'done');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+  CREATE TYPE task_priority AS ENUM ('low', 'medium', 'high');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+  CREATE TYPE invoice_status AS ENUM ('draft', 'sent', 'paid', 'overdue', 'cancelled');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- Profiles table (extends auth.users)
 CREATE TABLE IF NOT EXISTS profiles (
@@ -153,10 +177,27 @@ CREATE TABLE IF NOT EXISTS invoice_items (
 -- User settings table
 CREATE TABLE IF NOT EXISTS user_settings (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid UNIQUE REFERENCES profiles(id) ON DELETE CASCADE,
-  work_schedule jsonb DEFAULT '{}',
-  reminder_enabled boolean DEFAULT true,
-  reminder_interval integer DEFAULT 15,
+  user_id uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  notifications_enabled boolean DEFAULT true,
+  email_notifications boolean DEFAULT true,
+  dark_mode boolean DEFAULT false,
+  timezone text DEFAULT 'America/New_York',
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+-- File attachments table
+CREATE TABLE IF NOT EXISTS file_attachments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  filename text NOT NULL,
+  original_name text NOT NULL,
+  file_size bigint NOT NULL,
+  mime_type text NOT NULL,
+  bucket_name text NOT NULL,
+  file_path text NOT NULL,
+  uploaded_by uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  project_id uuid REFERENCES projects(id) ON DELETE CASCADE,
+  task_id uuid REFERENCES tasks(id) ON DELETE CASCADE,
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
 );
@@ -172,6 +213,76 @@ ALTER TABLE time_entries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE invoice_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE file_attachments ENABLE ROW LEVEL SECURITY;
+
+-- Drop all existing policies first to avoid conflicts
+-- Profile policies
+DROP POLICY IF EXISTS "Users can view own profile" ON profiles;
+DROP POLICY IF EXISTS "Users can update own profile" ON profiles;
+DROP POLICY IF EXISTS "Admins and managers can view all profiles" ON profiles;
+DROP POLICY IF EXISTS "Admins can view all profiles" ON profiles;
+DROP POLICY IF EXISTS "Managers can view all profiles" ON profiles;
+
+-- Client policies
+DROP POLICY IF EXISTS "Admins and managers can manage clients" ON clients;
+DROP POLICY IF EXISTS "Admins can manage clients" ON clients;
+DROP POLICY IF EXISTS "Managers can manage clients" ON clients;
+DROP POLICY IF EXISTS "Team members can view clients" ON clients;
+DROP POLICY IF EXISTS "Clients can view own company" ON clients;
+
+-- Project policies
+DROP POLICY IF EXISTS "Admins and managers can manage projects" ON projects;
+DROP POLICY IF EXISTS "Admins can manage projects" ON projects;
+DROP POLICY IF EXISTS "Managers can manage projects" ON projects;
+DROP POLICY IF EXISTS "Team members can view projects" ON projects;
+DROP POLICY IF EXISTS "Clients can view own projects" ON projects;
+
+-- Task policies
+DROP POLICY IF EXISTS "Admins and managers can manage tasks" ON tasks;
+DROP POLICY IF EXISTS "Admins can manage tasks" ON tasks;
+DROP POLICY IF EXISTS "Managers can manage tasks" ON tasks;
+DROP POLICY IF EXISTS "Team members can view and update assigned tasks" ON tasks;
+DROP POLICY IF EXISTS "Team members can view tasks" ON tasks;
+DROP POLICY IF EXISTS "Team members can update assigned tasks" ON tasks;
+DROP POLICY IF EXISTS "Clients can view tasks for their projects" ON tasks;
+
+-- Task checklist policies
+DROP POLICY IF EXISTS "Users can manage checklist for accessible tasks" ON task_checklist;
+DROP POLICY IF EXISTS "Users can view task checklist" ON task_checklist;
+DROP POLICY IF EXISTS "Users can manage task checklist" ON task_checklist;
+
+-- Task comments policies
+DROP POLICY IF EXISTS "Users can manage comments for accessible tasks" ON task_comments;
+DROP POLICY IF EXISTS "Users can view task comments" ON task_comments;
+DROP POLICY IF EXISTS "Users can add task comments" ON task_comments;
+DROP POLICY IF EXISTS "Users can update own comments" ON task_comments;
+DROP POLICY IF EXISTS "Users can delete own comments" ON task_comments;
+
+-- Time entries policies
+DROP POLICY IF EXISTS "Users can manage own time entries" ON time_entries;
+DROP POLICY IF EXISTS "Admins and managers can view all time entries" ON time_entries;
+DROP POLICY IF EXISTS "Admins can manage all time entries" ON time_entries;
+DROP POLICY IF EXISTS "Managers can view all time entries" ON time_entries;
+
+-- Invoice policies
+DROP POLICY IF EXISTS "Admins and managers can manage invoices" ON invoices;
+DROP POLICY IF EXISTS "Admins can manage invoices" ON invoices;
+DROP POLICY IF EXISTS "Clients can view own invoices" ON invoices;
+
+-- Invoice items policies
+DROP POLICY IF EXISTS "Users can view invoice items for accessible invoices" ON invoice_items;
+DROP POLICY IF EXISTS "Admins can manage invoice items" ON invoice_items;
+DROP POLICY IF EXISTS "Clients can view own invoice items" ON invoice_items;
+
+-- User settings policies
+DROP POLICY IF EXISTS "Users can view own settings" ON user_settings;
+DROP POLICY IF EXISTS "Users can update own settings" ON user_settings;
+
+-- File attachments policies
+DROP POLICY IF EXISTS "Users can view file attachments" ON file_attachments;
+DROP POLICY IF EXISTS "Users can upload file attachments" ON file_attachments;
+DROP POLICY IF EXISTS "Users can update own attachments" ON file_attachments;
+DROP POLICY IF EXISTS "Users can delete own attachments" ON file_attachments;
 
 -- Profiles policies
 CREATE POLICY "Users can view own profile"
@@ -392,10 +503,42 @@ CREATE POLICY "Users can view invoice items for accessible invoices"
   );
 
 -- User settings policies
-CREATE POLICY "Users can manage own settings"
-  ON user_settings FOR ALL
-  TO authenticated
-  USING (user_id = auth.uid());
+CREATE POLICY "Users can view own settings" ON user_settings
+  FOR SELECT USING (user_id = auth.uid());
+
+CREATE POLICY "Users can update own settings" ON user_settings
+  FOR UPDATE USING (user_id = auth.uid());
+
+-- File attachments policies
+CREATE POLICY "Users can view file attachments" ON file_attachments
+  FOR SELECT USING (
+    uploaded_by = auth.uid() OR
+    EXISTS (
+      SELECT 1 FROM profiles 
+      WHERE id = auth.uid() AND role IN ('admin', 'manager')
+    )
+  );
+
+CREATE POLICY "Users can upload file attachments" ON file_attachments
+  FOR INSERT WITH CHECK (uploaded_by = auth.uid());
+
+CREATE POLICY "Users can update own attachments" ON file_attachments
+  FOR UPDATE USING (
+    uploaded_by = auth.uid() OR
+    EXISTS (
+      SELECT 1 FROM profiles 
+      WHERE id = auth.uid() AND role IN ('admin', 'manager')
+    )
+  );
+
+CREATE POLICY "Users can delete own attachments" ON file_attachments
+  FOR DELETE USING (
+    uploaded_by = auth.uid() OR
+    EXISTS (
+      SELECT 1 FROM profiles 
+      WHERE id = auth.uid() AND role IN ('admin', 'manager')
+    )
+  );
 
 -- Functions for automatic timestamps
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -406,14 +549,30 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
--- Add update triggers
+-- Add update triggers (drop if exists first)
+DROP TRIGGER IF EXISTS update_profiles_updated_at ON profiles;
 CREATE TRIGGER update_profiles_updated_at BEFORE UPDATE ON profiles FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_clients_updated_at ON clients;
 CREATE TRIGGER update_clients_updated_at BEFORE UPDATE ON clients FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_projects_updated_at ON projects;
 CREATE TRIGGER update_projects_updated_at BEFORE UPDATE ON projects FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_tasks_updated_at ON tasks;
 CREATE TRIGGER update_tasks_updated_at BEFORE UPDATE ON tasks FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_time_entries_updated_at ON time_entries;
 CREATE TRIGGER update_time_entries_updated_at BEFORE UPDATE ON time_entries FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_invoices_updated_at ON invoices;
 CREATE TRIGGER update_invoices_updated_at BEFORE UPDATE ON invoices FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_user_settings_updated_at ON user_settings;
 CREATE TRIGGER update_user_settings_updated_at BEFORE UPDATE ON user_settings FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_file_attachments_updated_at ON file_attachments;
+CREATE TRIGGER update_file_attachments_updated_at BEFORE UPDATE ON file_attachments FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Function to create profile on user signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -434,7 +593,8 @@ BEGIN
 END;
 $$ language plpgsql security definer;
 
--- Trigger for new user signup
+-- Trigger for new user signup (drop if exists first)
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE OR REPLACE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
@@ -451,3 +611,7 @@ CREATE INDEX IF NOT EXISTS idx_time_entries_project_id ON time_entries(project_i
 CREATE INDEX IF NOT EXISTS idx_time_entries_date ON time_entries(date);
 CREATE INDEX IF NOT EXISTS idx_invoices_client_id ON invoices(client_id);
 CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);
+CREATE INDEX IF NOT EXISTS idx_file_attachments_uploaded_by ON file_attachments(uploaded_by);
+CREATE INDEX IF NOT EXISTS idx_file_attachments_project_id ON file_attachments(project_id);
+CREATE INDEX IF NOT EXISTS idx_file_attachments_task_id ON file_attachments(task_id);
+CREATE INDEX IF NOT EXISTS idx_file_attachments_created_at ON file_attachments(created_at);
