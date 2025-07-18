@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { useAppContext } from '../context/AppContext'
 import { Plus, Calendar, Link, Video, User, MessageSquare, X, Play, Pause, Clock } from 'lucide-react'
@@ -10,30 +10,43 @@ const ProjectBoard = () => {
     updateTask, 
     projects, 
     clients,
+    addProject,
     timer,
     setTimer,
     startTimer,
     stopTimer,
-    currentUser
+    currentUser,
+    teamMembers
   } = useAppContext()
 
   const [showNewTaskModal, setShowNewTaskModal] = useState(false)
+  const [showNewProjectModal, setShowNewProjectModal] = useState(false)
   const [selectedTask, setSelectedTask] = useState<any>(null)
   const [draggedTask, setDraggedTask] = useState<any>(null)
   const [newComment, setNewComment] = useState('')
   const [newChecklistItem, setNewChecklistItem] = useState('')
   const [selectedProject, setSelectedProject] = useState('all')
+  const [showProjectsList, setShowProjectsList] = useState(false)
+  const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null)
   
   const [newTask, setNewTask] = useState({
     title: '',
     description: '',
-    dueDate: '',
-    assignedTo: '',
-    client: '',
-    project: '',
-    deliverableLink: '',
-    videoLink: '',
+    due_date: '',
+    assigned_to: '',
+    project_id: '',
+    deliverable_link: '',
+    video_link: '',
     priority: 'medium' as 'low' | 'medium' | 'high'
+  })
+
+  const [newProject, setNewProject] = useState({
+    name: '',
+    description: '',
+    client_id: '',
+    status: 'active' as 'active' | 'completed' | 'on-hold' | 'cancelled',
+    due_date: '',
+    budget: 0
   })
 
   const columns = [
@@ -43,8 +56,6 @@ const ProjectBoard = () => {
     { id: 'done', title: 'Done', color: 'border-green-500' }
   ]
 
-  const teamMembers = ['John Doe', 'Jane Smith', 'Mike Johnson', 'Sarah Wilson']
-
   // Guard clause for null currentUser
   if (!currentUser) {
     return <div>Loading...</div>
@@ -53,43 +64,54 @@ const ProjectBoard = () => {
   // Filter projects and clients based on user role
   const getAvailableProjects = () => {
     if (currentUser.role === 'client') {
-      return projects.filter(project => project.client_id === currentUser.id)
+      // Clients can only see projects they created
+      return projects.filter(project => project.created_by === currentUser.id)
     }
-    // Team members can see all projects since they might be assigned tasks across different projects
+    // Admin, manager, team members can see all projects
     return projects
   }
 
   const getAvailableClients = () => {
     if (currentUser.role === 'client') {
-      return clients.filter(client => client.company === currentUser.company_name)
+      // Clients can only see their own company clients       return clients.filter(client => client.name === currentUser.company_name)
     }
-    // Team members can see all clients since they might work on tasks for different clients
+    // Admin, manager, team members can see all clients
     return clients
   }
 
   const availableProjects = getAvailableProjects()
   const availableClients = getAvailableClients()
 
+  // Auto-set client_id for client users when opening project modal
+  useEffect(() => {
+    if (showNewProjectModal && currentUser.role === 'client' && availableClients.length > 0) {
+      setNewProject(prev => ({
+        ...prev,
+        client_id: availableClients[0].id
+      }))
+    }
+  }, [showNewProjectModal, currentUser.role, availableClients])
+
+  // Show notification and auto-hide after 3 seconds
+  const showNotification = (message: string, type: 'success' | 'error') => {
+    setNotification({ message, type })
+    setTimeout(() => setNotification(null), 3000)
+  }
+
   const getTasksByStatus = (status: string) => {
     const filteredTasks = selectedProject === 'all' 
       ? (currentUser.role === 'client' 
-          ? tasks.filter(task => {
-              const project = projects.find(p => p.id === task.project_id)
-              return project?.client_id === currentUser.id
-            })
+          ? tasks.filter(task => task.created_by === currentUser.id)
           : tasks)
       : tasks.filter(task => {
           const projectMatch = task.project_id === selectedProject
           const clientMatch = currentUser.role === 'client' 
-            ? (() => {
-                const project = projects.find(p => p.id === task.project_id)
-                return project?.client_id === currentUser.id
-              })()
+            ? task.created_by === currentUser.id
             : true
           return projectMatch && clientMatch
         })
     
-    // Team members see all tasks (they might be assigned to any task)
+    // Return tasks filtered by status
     return filteredTasks.filter(task => task.status === status)
   }
 
@@ -118,38 +140,100 @@ const ProjectBoard = () => {
     }
   }
 
-  const createNewTask = () => {
-    if (!newTask.title || !newTask.assignedTo || !newTask.project) {
+  const createNewTask = async () => {
+    if (!newTask.title || !newTask.assigned_to || !newTask.project_id) {
+      showNotification('Please fill in all required fields', 'error')
+      return
+    }
+
+    // Validate that assigned_to is a valid user ID
+    const assignedUser = teamMembers.find(member => member.id === newTask.assigned_to)
+    if (!assignedUser) {
+      showNotification('Please select a valid team member', 'error')
+      return
+    }
+
+    // Additional validation to ensure it's a valid UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(newTask.assigned_to)) {
+      showNotification('Invalid user ID format. Please select again.', 'error')
+      console.error('Invalid UUID format for assigned_to:', newTask.assigned_to)
       return
     }
 
     try {
-      addTask({
+      await addTask({
         title: newTask.title,
-        description: newTask.description,
-        due_date: newTask.dueDate,
-        assigned_to: newTask.assignedTo,
-        project_id: newTask.project,
-        deliverable_link: newTask.deliverableLink,
-        video_link: newTask.videoLink,
+        description: newTask.description || null,
+        due_date: newTask.due_date || null,
+        assigned_to: newTask.assigned_to,
+        project_id: newTask.project_id,
+        deliverable_link: newTask.deliverable_link || null,
+        video_link: newTask.video_link || null,
         status: 'todo',
         priority: newTask.priority
+        // created_by is automatically set by AppContext
       })
 
       setNewTask({
         title: '',
         description: '',
-        dueDate: '',
-        assignedTo: '',
-        client: '',
-        project: '',
-        deliverableLink: '',
-        videoLink: '',
+        due_date: '',
+        assigned_to: '',
+        project_id: '',
+        deliverable_link: '',
+        video_link: '',
         priority: 'medium'
       })
       setShowNewTaskModal(false)
+      showNotification(`Task "${newTask.title}" created successfully!`, 'success')
     } catch (error) {
       console.error('Error creating task:', error)
+      showNotification('Failed to create task. Please try again.', 'error')
+    }
+  }
+
+  const createNewProject = async () => {
+    if (!newProject.name) {
+      showNotification('Please enter a project name', 'error')
+      return
+    }
+
+    // For client users, automatically set client_id to their company's client record
+    let clientId = newProject.client_id
+    if (currentUser.role === 'client' && availableClients.length > 0) {
+      clientId = availableClients[0].id
+    }
+
+    if (!clientId) {
+      showNotification('Please select a client', 'error')
+      return
+    }
+
+    try {
+      await addProject({
+        name: newProject.name,
+        description: newProject.description,
+        client_id: clientId,
+        status: newProject.status,
+        due_date: newProject.due_date,
+        budget: newProject.budget
+        // created_by is automatically set by AppContext
+      })
+
+      setNewProject({
+        name: '',
+        description: '',
+        client_id: '',
+        status: 'active',
+        due_date: '',
+        budget: 0
+      })
+      setShowNewProjectModal(false)
+      showNotification(`Project "${newProject.name}" created successfully!`, 'success')
+    } catch (error) {
+      console.error('Error creating project:', error)
+      showNotification('Failed to create project. Please try again.', 'error')
     }
   }
 
@@ -264,7 +348,11 @@ const ProjectBoard = () => {
         }`}
         draggable
         onDragStart={() => handleDragStart(task)}
-        onClick={() => setSelectedTask(task)}
+        onClick={() => setSelectedTask({
+          ...task,
+          checklist: task.checklist || [],
+          comments: task.comments || []
+        })}
       >
         <div className="flex items-start justify-between mb-3">
           <h4 className="font-medium text-white text-sm">{task.title}</h4>
@@ -295,24 +383,32 @@ const ProjectBoard = () => {
         <p className="text-dark-500 text-xs mb-3 line-clamp-2">{task.description}</p>
         
         <div className="text-xs text-dark-500 mb-2">
-          <span className="text-primary">{task.project}</span>
+          <span className="text-primary">
+            {projects.find(p => p.id === task.project_id)?.name || 'Unknown Project'}
+          </span>
         </div>
         
         <div className="flex items-center justify-between text-xs text-dark-500 mb-2">
-          <span className="text-secondary">{task.client}</span>
-          {task.dueDate && (
+          <span className="text-secondary">
+            {(() => {
+              const project = projects.find(p => p.id === task.project_id)
+              const client = clients.find(c => c.id === project?.client_id)
+              return client?.name || 'Unknown Client'
+            })()}
+          </span>
+          {task.due_date && (
             <div className="flex items-center space-x-1">
               <Calendar className="w-3 h-3" />
-              <span>{new Date(task.dueDate).toLocaleDateString()}</span>
+              <span>{new Date(task.due_date).toLocaleDateString()}</span>
             </div>
           )}
         </div>
         
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            {task.videoLink && <Video className="w-3 h-3 text-secondary" />}
-            {task.deliverableLink && <Link className="w-3 h-3 text-secondary" />}
-            {task.comments.length > 0 && (
+            {task.video_link && <Video className="w-3 h-3 text-secondary" />}
+            {task.deliverable_link && <Link className="w-3 h-3 text-secondary" />}
+            {task.comments && task.comments.length > 0 && (
               <div className="flex items-center space-x-1">
                 <MessageSquare className="w-3 h-3 text-secondary" />
                 <span className="text-xs text-secondary">{task.comments.length}</span>
@@ -322,9 +418,22 @@ const ProjectBoard = () => {
           <div className="flex items-center space-x-2">
             <div className="flex items-center space-x-1">
               <User className="w-3 h-3" />
-              <span>{task.assignedTo.split(' ')[0]}</span>
+              <span>
+                {(() => {
+                  // First try to find by ID (new format)
+                  const assignedUser = teamMembers.find(member => member.id === task.assigned_to)
+                  if (assignedUser) {
+                    return assignedUser.full_name.split(' ')[0]
+                  }
+                  // Fallback for old format (name directly stored)
+                  if (task.assigned_to) {
+                    return task.assigned_to.split(' ')[0]
+                  }
+                  return 'Unassigned'
+                })()}
+              </span>
             </div>
-            {task.checklist.length > 0 && (
+            {task.checklist && task.checklist.length > 0 && (
               <div className="text-xs text-dark-500">
                 {task.checklist.filter((item: any) => item.completed).length}/{task.checklist.length}
               </div>
@@ -337,6 +446,33 @@ const ProjectBoard = () => {
 
   return (
     <div className="space-y-6">
+      {/* Notification Toast */}
+      {notification && (
+        <motion.div
+          initial={{ opacity: 0, y: -50 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -50 }}
+          className={`fixed top-4 right-4 z-50 px-6 py-3 rounded-lg shadow-lg ${
+            notification.type === 'success' 
+              ? 'bg-green-500 text-white' 
+              : 'bg-red-500 text-white'
+          }`}
+        >
+          <div className="flex items-center space-x-2">
+            {notification.type === 'success' ? (
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+            )}
+            <span>{notification.message}</span>
+          </div>
+        </motion.div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -351,9 +487,25 @@ const ProjectBoard = () => {
           >
             <option value="all">All Projects</option>
             {availableProjects.map(project => (
-              <option key={project.id} value={project.name}>{project.name}</option>
+              <option key={project.id} value={project.id}>{project.name}</option>
             ))}
           </select>
+          <button
+            onClick={() => setShowProjectsList(!showProjectsList)}
+            className="flex items-center space-x-2 bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-lg transition-all duration-200"
+          >
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+            </svg>
+            <span>{showProjectsList ? 'Hide Projects' : 'Show Projects'}</span>
+          </button>
+          <button
+            onClick={() => setShowNewProjectModal(true)}
+            className="flex items-center space-x-2 bg-primary hover:bg-primary/90 text-white font-semibold py-2 px-4 rounded-lg transition-all duration-200"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Project</span>
+          </button>
           <button
             onClick={() => setShowNewTaskModal(true)}
             className="flex items-center space-x-2 bg-secondary hover:bg-secondary/90 text-white font-semibold py-2 px-4 rounded-lg transition-all duration-200"
@@ -383,6 +535,101 @@ const ProjectBoard = () => {
               {formatTime(timer.currentTime)}
             </div>
           </div>
+        </motion.div>
+      )}
+
+      {/* Projects List Section */}
+      {showProjectsList && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-dark-200 rounded-xl p-6 border border-dark-300"
+        >
+          <h3 className="text-lg font-semibold text-white mb-4">
+            {currentUser.role === 'client' ? 'My Projects' : 'All Projects'} ({availableProjects.length})
+          </h3>
+          
+          {availableProjects.length === 0 ? (
+            <div className="text-center py-8">
+              <div className="text-dark-500 mb-2">No projects found</div>
+              <button
+                onClick={() => setShowNewProjectModal(true)}
+                className="text-primary hover:text-primary/80 text-sm"
+              >
+                Create your first project
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {availableProjects.map(project => {
+                const client = clients.find(c => c.id === project.client_id)
+                const projectTasks = tasks.filter(task => task.project_id === project.id)
+                const completedTasks = projectTasks.filter(task => task.status === 'done')
+                const progress = projectTasks.length > 0 ? Math.round((completedTasks.length / projectTasks.length) * 100) : 0
+
+                return (
+                  <motion.div
+                    key={project.id}
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="bg-dark-300 rounded-lg p-4 border border-dark-400 hover:border-primary/50 transition-all duration-200"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <h4 className="font-medium text-white text-sm mb-1">{project.name}</h4>
+                        <p className="text-dark-500 text-xs">{client?.name || 'Unknown Client'}</p>
+                      </div>
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                        project.status === 'active' ? 'bg-green-500/20 text-green-400' :
+                        project.status === 'completed' ? 'bg-blue-500/20 text-blue-400' :
+                        project.status === 'on-hold' ? 'bg-yellow-500/20 text-yellow-400' :
+                        'bg-red-500/20 text-red-400'
+                      }`}>
+                        {project.status}
+                      </span>
+                    </div>
+
+                    {project.description && (
+                      <p className="text-dark-500 text-xs mb-3 line-clamp-2">{project.description}</p>
+                    )}
+
+                    <div className="space-y-2 mb-3">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-dark-500">Progress</span>
+                        <span className="text-white">{progress}%</span>
+                      </div>
+                      <div className="w-full bg-dark-400 rounded-full h-2">
+                        <div 
+                          className="bg-primary rounded-full h-2 transition-all duration-300"
+                          style={{ width: `${progress}%` }}
+                        ></div>
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-dark-500">
+                        <span>{completedTasks.length}/{projectTasks.length} tasks completed</span>
+                        {project.due_date && (
+                          <span>{new Date(project.due_date).toLocaleDateString()}</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <button
+                        onClick={() => setSelectedProject(project.id)}
+                        className="bg-primary/20 hover:bg-primary/30 text-primary px-3 py-1 rounded text-xs transition-all duration-200"
+                      >
+                        View Tasks
+                      </button>
+                      {project.budget > 0 && (
+                        <div className="text-xs text-dark-500">
+                          Budget: ${project.budget.toLocaleString()}
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                )
+              })}
+            </div>
+          )}
         </motion.div>
       )}
 
@@ -444,37 +691,17 @@ const ProjectBoard = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-dark-500 mb-2">Client *</label>
-                  <select
-                    value={newTask.client}
-                    onChange={(e) => setNewTask({...newTask, client: e.target.value})}
-                    className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
-                    disabled={currentUser.role === 'client'}
-                  >
-                    {currentUser.role === 'client' ? (
-                      <option value={currentUser.company_name || ''}>{currentUser.company_name}</option>
-                    ) : (
-                      <>
-                        <option value="">Select client</option>
-                        {availableClients.map(client => (
-                          <option key={client.id} value={client.company}>{client.company}</option>
-                        ))}
-                      </>
-                    )}
-                  </select>
-                </div>
+              <div className="grid grid-cols-1 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-dark-500 mb-2">Project *</label>
                   <select
-                    value={newTask.project}
-                    onChange={(e) => setNewTask({...newTask, project: e.target.value})}
+                    value={newTask.project_id}
+                    onChange={(e) => setNewTask({...newTask, project_id: e.target.value})}
                     className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
                   >
                     <option value="">Select project</option>
                     {availableProjects.map(project => (
-                      <option key={project.id} value={project.name}>{project.name}</option>
+                      <option key={project.id} value={project.id}>{project.name}</option>
                     ))}
                   </select>
                 </div>
@@ -482,24 +709,25 @@ const ProjectBoard = () => {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-dark-500 mb-2">Assigned To *</label>
-                  <select
-                    value={newTask.assignedTo}
-                    onChange={(e) => setNewTask({...newTask, assignedTo: e.target.value})}
-                    className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
-                  >
-                    <option value="">Select member</option>
-                    {teamMembers.map(member => (
-                      <option key={member} value={member}>{member}</option>
-                    ))}
-                  </select>
+                  <label className="block text-sm font-medium text-dark-500 mb-2">Assigned To *</label>                    <select
+                      value={newTask.assigned_to}
+                      onChange={(e) => setNewTask({...newTask, assigned_to: e.target.value})}
+                      className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                    >
+                      <option value="">Select member</option>
+                      {teamMembers
+                        .filter(member => member.role !== 'client')
+                        .map(member => (
+                          <option key={member.id} value={member.id}>{member.full_name}</option>
+                        ))}
+                    </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-dark-500 mb-2">Due Date</label>
                   <input
                     type="date"
-                    value={newTask.dueDate}
-                    onChange={(e) => setNewTask({...newTask, dueDate: e.target.value})}
+                    value={newTask.due_date}
+                    onChange={(e) => setNewTask({...newTask, due_date: e.target.value})}
                     className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
                   />
                 </div>
@@ -523,8 +751,8 @@ const ProjectBoard = () => {
                   <label className="block text-sm font-medium text-dark-500 mb-2">Deliverable Link</label>
                   <input
                     type="url"
-                    value={newTask.deliverableLink}
-                    onChange={(e) => setNewTask({...newTask, deliverableLink: e.target.value})}
+                    value={newTask.deliverable_link}
+                    onChange={(e) => setNewTask({...newTask, deliverable_link: e.target.value})}
                     placeholder="https://..."
                     className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
                   />
@@ -533,8 +761,8 @@ const ProjectBoard = () => {
                   <label className="block text-sm font-medium text-dark-500 mb-2">Video Instructions</label>
                   <input
                     type="url"
-                    value={newTask.videoLink}
-                    onChange={(e) => setNewTask({...newTask, videoLink: e.target.value})}
+                    value={newTask.video_link}
+                    onChange={(e) => setNewTask({...newTask, video_link: e.target.value})}
                     placeholder="Loom/Video URL"
                     className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
                   />
@@ -609,29 +837,16 @@ const ProjectBoard = () => {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-dark-500 mb-2">Client</label>
-                    <select
-                      value={selectedTask.client}
-                      onChange={(e) => setSelectedTask({ ...selectedTask, client: e.target.value })}
-                      className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
-                      disabled={currentUser.role === 'client'}
-                    >
-                      {availableClients.map(client => (
-                        <option key={client.id} value={client.company}>{client.company}</option>
-                      ))}
-                    </select>
-                  </div>
+                <div className="grid grid-cols-1 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-dark-500 mb-2">Project</label>
                     <select
-                      value={selectedTask.project}
-                      onChange={(e) => setSelectedTask({ ...selectedTask, project: e.target.value })}
+                      value={selectedTask.project_id}
+                      onChange={(e) => setSelectedTask({ ...selectedTask, project_id: e.target.value })}
                       className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
                     >
                       {availableProjects.map(project => (
-                        <option key={project.id} value={project.name}>{project.name}</option>
+                        <option key={project.id} value={project.id}>{project.name}</option>
                       ))}
                     </select>
                   </div>
@@ -641,21 +856,23 @@ const ProjectBoard = () => {
                   <div>
                     <label className="block text-sm font-medium text-dark-500 mb-2">Assigned To</label>
                     <select
-                      value={selectedTask.assignedTo}
-                      onChange={(e) => setSelectedTask({ ...selectedTask, assignedTo: e.target.value })}
+                      value={selectedTask.assigned_to}
+                      onChange={(e) => setSelectedTask({ ...selectedTask, assigned_to: e.target.value })}
                       className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
                     >
-                      {teamMembers.map(member => (
-                        <option key={member} value={member}>{member}</option>
-                      ))}
+                      {teamMembers
+                        .filter(member => member.role !== 'client')
+                        .map(member => (
+                          <option key={member.id} value={member.id}>{member.full_name}</option>
+                        ))}
                     </select>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-dark-500 mb-2">Due Date</label>
                     <input
                       type="date"
-                      value={selectedTask.dueDate}
-                      onChange={(e) => setSelectedTask({ ...selectedTask, dueDate: e.target.value })}
+                      value={selectedTask.due_date}
+                      onChange={(e) => setSelectedTask({ ...selectedTask, due_date: e.target.value })}
                       className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
                     />
                   </div>
@@ -694,8 +911,8 @@ const ProjectBoard = () => {
                     <label className="block text-sm font-medium text-dark-500 mb-2">Deliverable Link</label>
                     <input
                       type="url"
-                      value={selectedTask.deliverableLink}
-                      onChange={(e) => setSelectedTask({ ...selectedTask, deliverableLink: e.target.value })}
+                      value={selectedTask.deliverable_link}
+                      onChange={(e) => setSelectedTask({ ...selectedTask, deliverable_link: e.target.value })}
                       placeholder="https://..."
                       className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
                     />
@@ -704,8 +921,8 @@ const ProjectBoard = () => {
                     <label className="block text-sm font-medium text-dark-500 mb-2">Video Instructions</label>
                     <input
                       type="url"
-                      value={selectedTask.videoLink}
-                      onChange={(e) => setSelectedTask({ ...selectedTask, videoLink: e.target.value })}
+                      value={selectedTask.video_link}
+                      onChange={(e) => setSelectedTask({ ...selectedTask, video_link: e.target.value })}
                       placeholder="Loom/Video URL"
                       className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
                     />
@@ -802,6 +1019,122 @@ const ProjectBoard = () => {
                 className="bg-secondary hover:bg-secondary/90 text-white font-semibold py-2 px-4 rounded-lg transition-all duration-200"
               >
                 Save Changes
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* New Project Modal */}
+      {showNewProjectModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-dark-200 rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+          >
+            <h3 className="text-xl font-bold text-white mb-6">Create New Project</h3>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-dark-500 mb-2">Project Name *</label>
+                <input
+                  type="text"
+                  value={newProject.name}
+                  onChange={(e) => setNewProject({...newProject, name: e.target.value})}
+                  className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                  placeholder="Enter project name"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-dark-500 mb-2">Description</label>
+                <textarea
+                  value={newProject.description}
+                  onChange={(e) => setNewProject({...newProject, description: e.target.value})}
+                  className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                  rows={3}
+                  placeholder="Enter project description"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-dark-500 mb-2">Client *</label>
+                  <select
+                    value={newProject.client_id}
+                    onChange={(e) => setNewProject({...newProject, client_id: e.target.value})}
+                    className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                    disabled={currentUser.role === 'client'}
+                  >
+                    {currentUser.role === 'client' ? (
+                      availableClients.length > 0 ? (
+                        <option value={availableClients[0].id}>{availableClients[0].name}</option>
+                      ) : (
+                        <option value="">No client found</option>
+                      )
+                    ) : (
+                      <>
+                        <option value="">Select client</option>
+                        {availableClients.map(client => (
+                          <option key={client.id} value={client.id}>{client.name}</option>
+                        ))}
+                      </>
+                    )}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-dark-500 mb-2">Status</label>
+                  <select
+                    value={newProject.status}
+                    onChange={(e) => setNewProject({...newProject, status: e.target.value as 'active' | 'completed' | 'on-hold' | 'cancelled'})}
+                    className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                  >
+                    <option value="active">Active</option>
+                    <option value="on-hold">On Hold</option>
+                    <option value="completed">Completed</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-dark-500 mb-2">Due Date</label>
+                  <input
+                    type="date"
+                    value={newProject.due_date}
+                    onChange={(e) => setNewProject({...newProject, due_date: e.target.value})}
+                    className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-dark-500 mb-2">Budget</label>
+                  <input
+                    type="number"
+                    value={newProject.budget}
+                    onChange={(e) => setNewProject({...newProject, budget: Number(e.target.value)})}
+                    className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                    placeholder="0"
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={() => setShowNewProjectModal(false)}
+                className="px-4 py-2 text-dark-500 hover:text-white transition-colors duration-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={createNewProject}
+                className="bg-primary hover:bg-primary/90 text-white font-semibold py-2 px-4 rounded-lg transition-all duration-200"
+              >
+                Create Project
               </button>
             </div>
           </motion.div>

@@ -522,7 +522,7 @@ This invoice was generated automatically by TeamFlow.`
             >
               <option value="all">All Clients</option>
               {clients.map(client => (
-                <option key={client.id} value={client.company}>{client.company}</option>
+                <option key={client.id} value={client.name}>{client.name}</option>
               ))}
             </select>
           )}
@@ -720,7 +720,7 @@ This invoice was generated automatically by TeamFlow.`
                   >
                     <option value="">Select a client</option>
                     {clients.map(client => (
-                      <option key={client.id} value={client.company}>{client.company}</option>
+                      <option key={client.id} value={client.name}>{client.name}</option>
                     ))}
                   </select>
                 </div>

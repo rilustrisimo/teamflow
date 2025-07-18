@@ -291,7 +291,7 @@ const FinancialDashboard = () => {
                   const isCorrectPeriod = viewType === 'monthly' 
                     ? invDate.getMonth() === selectedMonth && invDate.getFullYear() === selectedYear
                     : invDate.getFullYear() === selectedYear
-                  return inv.client === client.company && inv.status === 'paid' && isCorrectPeriod
+                  return inv.client === client.name && inv.status === 'paid' && isCorrectPeriod
                 })
                 .reduce((sum, inv) => sum + inv.amount, 0)
               
@@ -303,7 +303,7 @@ const FinancialDashboard = () => {
                 <div key={client.id} className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
                     <div className="w-3 h-3 bg-secondary rounded-full"></div>
-                    <span className="text-white">{client.company}</span>
+                    <span className="text-white">{client.name}</span>
                   </div>
                   <div className="text-right">
                     <div className="text-white font-medium">${clientRevenue.toLocaleString()}</div>

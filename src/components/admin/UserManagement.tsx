@@ -42,7 +42,6 @@ const UserManagement = () => {
   const [inviteData, setInviteData] = useState({
     email: '',
     full_name: '',
-    company_name: '',
     role: 'team-member' as const,
     hourly_rate: 0
   })
@@ -80,6 +79,19 @@ const UserManagement = () => {
         return
       }
 
+      // Basic email validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(newUser.email)) {
+        setError('Please enter a valid email address')
+        return
+      }
+
+      // Password validation
+      if (newUser.password.length < 6) {
+        setError('Password must be at least 6 characters long')
+        return
+      }
+
       setLoading(true)
       setError('')
       await AdminService.createUser(newUser)
@@ -102,11 +114,17 @@ const UserManagement = () => {
         return
       }
 
+      // Basic email validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(inviteData.email)) {
+        setError('Please enter a valid email address')
+        return
+      }
+
       setLoading(true)
       setError('')
       await AdminService.inviteUser(inviteData.email, {
         full_name: inviteData.full_name,
-        company_name: inviteData.company_name,
         role: inviteData.role,
         hourly_rate: inviteData.hourly_rate
       })
@@ -196,7 +214,6 @@ const UserManagement = () => {
     setInviteData({
       email: '',
       full_name: '',
-      company_name: '',
       role: 'team-member',
       hourly_rate: 0
     })
@@ -587,19 +604,6 @@ const UserManagement = () => {
                   onChange={(e) => setInviteData({ ...inviteData, full_name: e.target.value })}
                   className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
                   placeholder="John Doe"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">
-                  Company
-                </label>
-                <input
-                  type="text"
-                  value={inviteData.company_name}
-                  onChange={(e) => setInviteData({ ...inviteData, company_name: e.target.value })}
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
-                  placeholder="Company Name"
                 />
               </div>
 

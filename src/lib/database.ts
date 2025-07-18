@@ -1,8 +1,19 @@
 import { supabase } from './supabase'
 import type { Database } from './database.types'
 
+// Helper function to get current authenticated user ID
+async function getCurrentUserId(): Promise<string> {
+  const { data: { user }, error } = await supabase.auth.getUser()
+  if (error || !user) {
+    throw new Error('User not authenticated')
+  }
+  return user.id
+}
+
 // Type definitions for our database tables
 export type Profile = Database['public']['Tables']['profiles']['Row']
+export type Company = Database['public']['Tables']['companies']['Row']
+export type UserInvitation = Database['public']['Tables']['user_invitations']['Row']
 export type Client = Database['public']['Tables']['clients']['Row']
 export type Project = Database['public']['Tables']['projects']['Row']
 export type Task = Database['public']['Tables']['tasks']['Row']
@@ -13,6 +24,8 @@ export type TaskComment = Database['public']['Tables']['task_comments']['Row']
 
 // Insert types
 export type ProfileInsert = Database['public']['Tables']['profiles']['Insert']
+export type CompanyInsert = Database['public']['Tables']['companies']['Insert']
+export type UserInvitationInsert = Database['public']['Tables']['user_invitations']['Insert']
 export type ClientInsert = Database['public']['Tables']['clients']['Insert']
 export type ProjectInsert = Database['public']['Tables']['projects']['Insert']
 export type TaskInsert = Database['public']['Tables']['tasks']['Insert']
@@ -21,6 +34,8 @@ export type InvoiceInsert = Database['public']['Tables']['invoices']['Insert']
 
 // Update types
 export type ProfileUpdate = Database['public']['Tables']['profiles']['Update']
+export type CompanyUpdate = Database['public']['Tables']['companies']['Update']
+export type UserInvitationUpdate = Database['public']['Tables']['user_invitations']['Update']
 export type ClientUpdate = Database['public']['Tables']['clients']['Update']
 export type ProjectUpdate = Database['public']['Tables']['projects']['Update']
 export type TaskUpdate = Database['public']['Tables']['tasks']['Update']
@@ -29,12 +44,107 @@ export type InvoiceUpdate = Database['public']['Tables']['invoices']['Update']
 
 // Database service class
 export class DatabaseService {
+  // Company operations
+  static async getCompany(companyId: string) {
+    const { data, error } = await supabase
+      .from('companies')
+      .select('*')
+      .eq('id', companyId)
+      .single()
+    
+    if (error) throw error
+    return data
+  }
+
+  static async getCurrentUserCompany() {
+    try {
+      const userId = await getCurrentUserId()
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('company_id, companies(*)')
+        .eq('user_id', userId)
+        .single()
+      
+      return profile?.companies || null
+    } catch (error) {
+      console.warn('Could not get current user company:', error)
+      return null
+    }
+  }
+
+  static async updateCompany(companyId: string, updates: CompanyUpdate) {
+    const { data, error } = await supabase
+      .from('companies')
+      .update(updates)
+      .eq('id', companyId)
+      .select()
+      .single()
+    
+    if (error) throw error
+    return data
+  }
+
+  // User invitation operations
+  static async createInvitation(invitation: UserInvitationInsert) {
+    const { data, error } = await supabase
+      .from('user_invitations')
+      .insert(invitation)
+      .select()
+      .single()
+    
+    if (error) throw error
+    return data
+  }
+
+  static async getCompanyInvitations(companyId: string) {
+    const { data, error } = await supabase
+      .from('user_invitations')
+      .select('*')
+      .eq('company_id', companyId)
+      .order('created_at', { ascending: false })
+    
+    if (error) throw error
+    return data
+  }
+
+  static async deleteInvitation(invitationId: string) {
+    const { error } = await supabase
+      .from('user_invitations')
+      .delete()
+      .eq('id', invitationId)
+    
+    if (error) throw error
+  }
+
+  static async getInvitationByToken(token: string) {
+    const { data, error } = await supabase
+      .from('user_invitations')
+      .select('*, companies(*)')
+      .eq('invitation_token', token)
+      .maybeSingle()
+    
+    if (error) throw error
+    return data
+  }
+
+  static async updateInvitation(invitationId: string, updates: UserInvitationUpdate) {
+    const { data, error } = await supabase
+      .from('user_invitations')
+      .update(updates)
+      .eq('id', invitationId)
+      .select()
+      .single()
+    
+    if (error) throw error
+    return data
+  }
+
   // Profile operations
   static async getProfile(userId: string) {
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
-      .eq('id', userId)
+      .eq('user_id', userId)
       .single()
     
     if (error) throw error
@@ -45,7 +155,18 @@ export class DatabaseService {
     const { data, error } = await supabase
       .from('profiles')
       .update(updates)
-      .eq('id', userId)
+      .eq('user_id', userId)
+      .select()
+      .single()
+    
+    if (error) throw error
+    return data
+  }
+
+  static async createProfile(profile: ProfileInsert) {
+    const { data, error } = await supabase
+      .from('profiles')
+      .insert(profile)
       .select()
       .single()
     
@@ -54,9 +175,22 @@ export class DatabaseService {
   }
 
   static async getAllProfiles() {
+    // Get current user's company_id first
+    const userId = await getCurrentUserId()
+    const { data: currentProfile } = await supabase
+      .from('profiles')
+      .select('company_id')
+      .eq('user_id', userId)
+      .single()
+    
+    if (!currentProfile?.company_id) {
+      throw new Error('User not associated with a company')
+    }
+
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
+      .eq('company_id', currentProfile.company_id)
       .order('full_name')
     
     if (error) throw error
@@ -65,20 +199,43 @@ export class DatabaseService {
 
   // Client operations
   static async getClients() {
+    // Get current user's company_id first
+    const { data: currentProfile } = await supabase
+      .from('profiles')
+      .select('company_id')
+      .eq('user_id', await getCurrentUserId())
+      .single()
+    
+    if (!currentProfile?.company_id) {
+      throw new Error('User not associated with a company')
+    }
+
     const { data, error } = await supabase
       .from('clients')
-      .select('*')
-      .order('company')
+      .select('id, company_id, name, email, phone, address, created_by, created_at, updated_at')
+      .eq('company_id', currentProfile.company_id)
+      .order('name')
     
     if (error) throw error
     return data
   }
 
-  static async createClient(client: ClientInsert) {
+  static async createClient(client: Omit<ClientInsert, 'company_id'>) {
+    // Get current user's company_id
+    const { data: currentProfile } = await supabase
+      .from('profiles')
+      .select('company_id')
+      .eq('user_id', await getCurrentUserId())
+      .single()
+    
+    if (!currentProfile?.company_id) {
+      throw new Error('User not associated with a company')
+    }
+
     const { data, error } = await supabase
       .from('clients')
-      .insert(client)
-      .select()
+      .insert({ ...client, company_id: currentProfile.company_id })
+      .select('id, company_id, name, email, phone, address, created_by, created_at, updated_at')
       .single()
     
     if (error) throw error
@@ -90,7 +247,7 @@ export class DatabaseService {
       .from('clients')
       .update(updates)
       .eq('id', id)
-      .select()
+      .select('id, company_id, name, email, phone, address, created_by, created_at, updated_at')
       .single()
     
     if (error) throw error
@@ -108,22 +265,45 @@ export class DatabaseService {
 
   // Project operations
   static async getProjects() {
+    // Get current user's company_id first
+    const { data: currentProfile } = await supabase
+      .from('profiles')
+      .select('company_id')
+      .eq('user_id', await getCurrentUserId())
+      .single()
+    
+    if (!currentProfile?.company_id) {
+      throw new Error('User not associated with a company')
+    }
+
     const { data, error } = await supabase
       .from('projects')
       .select(`
         *,
         client:clients(*)
       `)
+      .eq('company_id', currentProfile.company_id)
       .order('created_at', { ascending: false })
     
     if (error) throw error
     return data
   }
 
-  static async createProject(project: ProjectInsert) {
+  static async createProject(project: Omit<ProjectInsert, 'company_id'>) {
+    // Get current user's company_id
+    const { data: currentProfile } = await supabase
+      .from('profiles')
+      .select('company_id')
+      .eq('user_id', await getCurrentUserId())
+      .single()
+    
+    if (!currentProfile?.company_id) {
+      throw new Error('User not associated with a company')
+    }
+
     const { data, error } = await supabase
       .from('projects')
-      .insert(project)
+      .insert({ ...project, company_id: currentProfile.company_id })
       .select(`
         *,
         client:clients(*)
@@ -160,32 +340,43 @@ export class DatabaseService {
 
   // Task operations
   static async getTasks() {
+    // Get current user's company_id first
+    const { data: currentProfile } = await supabase
+      .from('profiles')
+      .select('company_id')
+      .eq('user_id', await getCurrentUserId())
+      .single()
+    
+    if (!currentProfile?.company_id) {
+      throw new Error('User not associated with a company')
+    }
+
     const { data, error } = await supabase
       .from('tasks')
-      .select(`
-        *,
-        project:projects(*),
-        assigned_user:profiles!tasks_assigned_to_fkey(*),
-        checklist:task_checklist(*),
-        comments:task_comments(*, author:profiles(*))
-      `)
+      .select('*')
+      .eq('company_id', currentProfile.company_id)
       .order('created_at', { ascending: false })
     
     if (error) throw error
     return data
   }
 
-  static async createTask(task: TaskInsert) {
+  static async createTask(task: Omit<TaskInsert, 'company_id'>) {
+    // Get current user's company_id
+    const { data: currentProfile } = await supabase
+      .from('profiles')
+      .select('company_id')
+      .eq('user_id', await getCurrentUserId())
+      .single()
+    
+    if (!currentProfile?.company_id) {
+      throw new Error('User not associated with a company')
+    }
+
     const { data, error } = await supabase
       .from('tasks')
-      .insert(task)
-      .select(`
-        *,
-        project:projects(*),
-        assigned_user:profiles!tasks_assigned_to_fkey(*),
-        checklist:task_checklist(*),
-        comments:task_comments(*, author:profiles(*))
-      `)
+      .insert({ ...task, company_id: currentProfile.company_id })
+      .select('*')
       .single()
     
     if (error) throw error
@@ -197,13 +388,7 @@ export class DatabaseService {
       .from('tasks')
       .update(updates)
       .eq('id', id)
-      .select(`
-        *,
-        project:projects(*),
-        assigned_user:profiles!tasks_assigned_to_fkey(*),
-        checklist:task_checklist(*),
-        comments:task_comments(*, author:profiles(*))
-      `)
+      .select('*')
       .single()
     
     if (error) throw error
@@ -221,9 +406,20 @@ export class DatabaseService {
 
   // Task checklist operations
   static async addChecklistItem(taskId: string, text: string) {
+    // Get current user's company_id
+    const { data: currentProfile } = await supabase
+      .from('profiles')
+      .select('company_id')
+      .eq('user_id', await getCurrentUserId())
+      .single()
+    
+    if (!currentProfile?.company_id) {
+      throw new Error('User not associated with a company')
+    }
+
     const { data, error } = await supabase
       .from('task_checklist')
-      .insert({ task_id: taskId, text })
+      .insert({ task_id: taskId, text, company_id: currentProfile.company_id })
       .select()
       .single()
     
@@ -254,10 +450,21 @@ export class DatabaseService {
 
   // Task comment operations
   static async addTaskComment(taskId: string, authorId: string, text: string) {
+    // Get current user's company_id
+    const { data: currentProfile } = await supabase
+      .from('profiles')
+      .select('company_id')
+      .eq('user_id', await getCurrentUserId())
+      .single()
+    
+    if (!currentProfile?.company_id) {
+      throw new Error('User not associated with a company')
+    }
+
     const { data, error } = await supabase
       .from('task_comments')
-      .insert({ task_id: taskId, author_id: authorId, text })
-      .select('*, author:profiles(*)')
+      .insert({ task_id: taskId, author_id: authorId, text, company_id: currentProfile.company_id })
+      .select('*')
       .single()
     
     if (error) throw error
@@ -266,14 +473,21 @@ export class DatabaseService {
 
   // Time entry operations
   static async getTimeEntries(userId?: string) {
+    // Get current user's company_id first
+    const { data: currentProfile } = await supabase
+      .from('profiles')
+      .select('company_id')
+      .eq('user_id', await getCurrentUserId())
+      .single()
+    
+    if (!currentProfile?.company_id) {
+      throw new Error('User not associated with a company')
+    }
+
     let query = supabase
       .from('time_entries')
-      .select(`
-        *,
-        project:projects(*),
-        task:tasks(*),
-        user:profiles(*)
-      `)
+      .select('*')
+      .eq('company_id', currentProfile.company_id)
       .order('date', { ascending: false })
       .order('start_time', { ascending: false })
     
@@ -287,16 +501,22 @@ export class DatabaseService {
     return data
   }
 
-  static async createTimeEntry(timeEntry: TimeEntryInsert) {
+  static async createTimeEntry(timeEntry: Omit<TimeEntryInsert, 'company_id'>) {
+    // Get current user's company_id
+    const { data: currentProfile } = await supabase
+      .from('profiles')
+      .select('company_id')
+      .eq('user_id', await getCurrentUserId())
+      .single()
+    
+    if (!currentProfile?.company_id) {
+      throw new Error('User not associated with a company')
+    }
+
     const { data, error } = await supabase
       .from('time_entries')
-      .insert(timeEntry)
-      .select(`
-        *,
-        project:projects(*),
-        task:tasks(*),
-        user:profiles(*)
-      `)
+      .insert({ ...timeEntry, company_id: currentProfile.company_id })
+      .select('*')
       .single()
     
     if (error) throw error
@@ -308,12 +528,7 @@ export class DatabaseService {
       .from('time_entries')
       .update(updates)
       .eq('id', id)
-      .select(`
-        *,
-        project:projects(*),
-        task:tasks(*),
-        user:profiles(*)
-      `)
+      .select('*')
       .single()
     
     if (error) throw error
@@ -331,6 +546,17 @@ export class DatabaseService {
 
   // Invoice operations
   static async getInvoices() {
+    // Get current user's company_id first
+    const { data: currentProfile } = await supabase
+      .from('profiles')
+      .select('company_id')
+      .eq('user_id', await getCurrentUserId())
+      .single()
+    
+    if (!currentProfile?.company_id) {
+      throw new Error('User not associated with a company')
+    }
+
     const { data, error } = await supabase
       .from('invoices')
       .select(`
@@ -338,25 +564,38 @@ export class DatabaseService {
         client:clients(*),
         items:invoice_items(*)
       `)
+      .eq('company_id', currentProfile.company_id)
       .order('created_at', { ascending: false })
     
     if (error) throw error
     return data
   }
 
-  static async createInvoice(invoice: InvoiceInsert, items: Array<{ description: string; hours: number; rate: number; amount: number }>) {
+  static async createInvoice(invoice: Omit<InvoiceInsert, 'company_id'>, items: Array<{ description: string; hours: number; rate: number; amount: number }>) {
+    // Get current user's company_id
+    const { data: currentProfile } = await supabase
+      .from('profiles')
+      .select('company_id')
+      .eq('user_id', await getCurrentUserId())
+      .single()
+    
+    if (!currentProfile?.company_id) {
+      throw new Error('User not associated with a company')
+    }
+
     // Start a transaction
     const { data: invoiceData, error: invoiceError } = await supabase
       .from('invoices')
-      .insert(invoice)
+      .insert({ ...invoice, company_id: currentProfile.company_id })
       .select()
       .single()
     
     if (invoiceError) throw invoiceError
 
-    // Add invoice items
+    // Add invoice items with company_id
     const invoiceItems = items.map(item => ({
       invoice_id: invoiceData.id,
+      company_id: currentProfile.company_id,
       ...item
     }))
 
@@ -412,10 +651,22 @@ export class DatabaseService {
 
   // User settings operations
   static async getUserSettings(userId: string) {
+    // Get current user's company_id
+    const { data: currentProfile } = await supabase
+      .from('profiles')
+      .select('company_id')
+      .eq('user_id', await getCurrentUserId())
+      .single()
+    
+    if (!currentProfile?.company_id) {
+      throw new Error('User not associated with a company')
+    }
+
     const { data, error } = await supabase
       .from('user_settings')
       .select('*')
       .eq('user_id', userId)
+      .eq('company_id', currentProfile.company_id)
       .single()
     
     if (error) throw error
@@ -423,10 +674,22 @@ export class DatabaseService {
   }
 
   static async updateUserSettings(userId: string, settings: any) {
+    // Get current user's company_id
+    const { data: currentProfile } = await supabase
+      .from('profiles')
+      .select('company_id')
+      .eq('user_id', await getCurrentUserId())
+      .single()
+    
+    if (!currentProfile?.company_id) {
+      throw new Error('User not associated with a company')
+    }
+
     const { data, error } = await supabase
       .from('user_settings')
       .upsert({
         user_id: userId,
+        company_id: currentProfile.company_id,
         ...settings
       })
       .select()
@@ -437,25 +700,47 @@ export class DatabaseService {
   }
 
   // Real-time subscriptions
-  static subscribeToTable(table: string, callback: (payload: any) => void) {
+  static async subscribeToTable(table: string, callback: (payload: any) => void) {
+    // Get current user's company_id for filtering
+    const { data: currentProfile } = await supabase
+      .from('profiles')
+      .select('company_id')
+      .eq('user_id', await getCurrentUserId())
+      .single()
+    
+    if (!currentProfile?.company_id) {
+      throw new Error('User not associated with a company')
+    }
+
     return supabase
       .channel(`${table}_changes`)
       .on('postgres_changes', 
-        { event: '*', schema: 'public', table }, 
+        { event: '*', schema: 'public', table, filter: `company_id=eq.${currentProfile.company_id}` }, 
         callback
       )
       .subscribe()
   }
 
-  static subscribeToUserData(userId: string, callback: (payload: any) => void) {
+  static async subscribeToUserData(userId: string, callback: (payload: any) => void) {
+    // Get current user's company_id for filtering
+    const { data: currentProfile } = await supabase
+      .from('profiles')
+      .select('company_id')
+      .eq('user_id', await getCurrentUserId())
+      .single()
+    
+    if (!currentProfile?.company_id) {
+      throw new Error('User not associated with a company')
+    }
+
     return supabase
       .channel('user_data_changes')
       .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'time_entries', filter: `user_id=eq.${userId}` }, 
+        { event: '*', schema: 'public', table: 'time_entries', filter: `user_id=eq.${userId}&company_id=eq.${currentProfile.company_id}` }, 
         callback
       )
       .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'tasks', filter: `assigned_to=eq.${userId}` }, 
+        { event: '*', schema: 'public', table: 'tasks', filter: `assigned_to=eq.${userId}&company_id=eq.${currentProfile.company_id}` }, 
         callback
       )
       .subscribe()

@@ -1,7 +1,11 @@
 import { createClient } from '@supabase/supabase-js'
 import type { Database } from './database.types'
+import { supabase } from './supabase'
+import { EmailService } from './emailService'
 
 // Create a separate admin client with service role key
+// Note: This will show a warning about multiple clients, but it's intentional
+// as we need different clients for user auth vs admin operations
 const supabaseAdmin = createClient<Database>(
   import.meta.env.VITE_SUPABASE_URL,
   import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY,
@@ -9,6 +13,11 @@ const supabaseAdmin = createClient<Database>(
     auth: {
       autoRefreshToken: false,
       persistSession: false
+    },
+    global: {
+      headers: {
+        'X-Client-Info': 'admin-client'
+      }
     }
   }
 )
@@ -43,10 +52,41 @@ export interface UpdateUserData {
 }
 
 export class AdminService {
-  // Get all users with their auth and profile data
+  // Get all users with their auth and profile data (scoped to current admin's company)
   static async getAllUsers(): Promise<AdminUser[]> {
     try {
-      // Get all auth users
+      // Get current admin from regular supabase client (not service role)
+      const { data: { user }, error: userError } = await supabase.auth.getUser()
+      
+      if (userError || !user) {
+        throw new Error('Admin not authenticated')
+      }
+
+      // Get admin's profile to get company_id
+      const { data: adminProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('user_id', user.id)
+        .single()
+
+      if (profileError || !adminProfile?.company_id) {
+        throw new Error('Admin profile not found or no company associated')
+      }
+
+      // Get all profiles in the admin's company
+      const { data: profiles, error: profilesError } = await supabaseAdmin
+        .from('profiles')
+        .select('*')
+        .eq('company_id', adminProfile.company_id)
+        .order('created_at', { ascending: false })
+
+      if (profilesError) {
+        console.error('Profile error:', profilesError)
+        throw profilesError
+      }
+
+      // Get auth users for the profile IDs
+      const profileIds = profiles?.map(p => p.user_id) || []
       const { data: authUsers, error: authError } = await supabaseAdmin.auth.admin.listUsers()
       
       if (authError) {
@@ -54,22 +94,14 @@ export class AdminService {
         throw authError
       }
 
-      // Get all profiles
-      const { data: profiles, error: profileError } = await supabaseAdmin
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false })
-
-      if (profileError) {
-        console.error('Profile error:', profileError)
-        throw profileError
-      }
+      // Filter auth users to only include those with profiles in this company
+      const filteredAuthUsers = authUsers?.users.filter(u => profileIds.includes(u.id)) || []
 
       // Combine auth and profile data
       const users: AdminUser[] = profiles?.map(profile => {
-        const authUser = authUsers?.users.find(u => u.id === profile.id)
+        const authUser = filteredAuthUsers.find(u => u.id === profile.user_id)
         return {
-          id: profile.id,
+          id: profile.user_id,
           email: authUser?.email || '',
           full_name: profile.full_name,
           company_name: profile.company_name,
@@ -92,7 +124,25 @@ export class AdminService {
   // Create a new user
   static async createUser(userData: CreateUserData): Promise<AdminUser> {
     try {
-      // Create auth user
+      // Get current admin from regular supabase client (not service role)
+      const { data: { user }, error: userError } = await supabase.auth.getUser()
+      
+      if (userError || !user) {
+        throw new Error('Admin not authenticated')
+      }
+
+      // Get admin's profile to get company_id
+      const { data: adminProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('user_id', user.id)
+        .single()
+
+      if (profileError || !adminProfile?.company_id) {
+        throw new Error('Admin profile not found or no company associated')
+      }
+
+      // Create auth user with metadata - the trigger will handle profile creation
       const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
         email: userData.email,
         password: userData.password,
@@ -100,7 +150,10 @@ export class AdminService {
         user_metadata: {
           full_name: userData.full_name,
           company_name: userData.company_name,
-          role: userData.role
+          role: userData.role,
+          hourly_rate: userData.hourly_rate,
+          is_admin_signup: false, // This is not an admin signup
+          admin_company_id: adminProfile.company_id // Pass the admin's company ID
         }
       })
 
@@ -113,22 +166,19 @@ export class AdminService {
         throw new Error('Failed to create user')
       }
 
-      // Update profile with additional data
-      const { data: profile, error: profileError } = await supabaseAdmin
+      // Wait a moment for the trigger to complete
+      await new Promise(resolve => setTimeout(resolve, 1000))
+
+      // Get the created profile
+      const { data: profile, error: profileFetchError } = await supabaseAdmin
         .from('profiles')
-        .update({
-          full_name: userData.full_name,
-          company_name: userData.company_name,
-          role: userData.role,
-          hourly_rate: userData.hourly_rate
-        })
-        .eq('id', authData.user.id)
-        .select()
+        .select('*')
+        .eq('user_id', authData.user.id)
         .single()
 
-      if (profileError) {
-        console.error('Profile update error:', profileError)
-        throw profileError
+      if (profileFetchError) {
+        console.error('Profile fetch error:', profileFetchError)
+        throw profileFetchError
       }
 
       return {
@@ -208,20 +258,84 @@ export class AdminService {
   }
 
   // Invite user (send invitation email)
-  static async inviteUser(email: string, userData: Omit<CreateUserData, 'email' | 'password'>): Promise<void> {
+  static async inviteUser(email: string, userData: Omit<CreateUserData, 'email' | 'password' | 'company_name'>): Promise<void> {
     try {
-      const { error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-        data: {
-          full_name: userData.full_name,
-          company_name: userData.company_name,
-          role: userData.role,
-          hourly_rate: userData.hourly_rate
-        }
-      })
+      // Get current admin from regular supabase client (not service role)
+      const { data: { user }, error: userError } = await supabase.auth.getUser()
+      
+      if (userError || !user) {
+        throw new Error('Admin not authenticated')
+      }
 
-      if (error) {
-        console.error('Invite user error:', error)
-        throw error
+      // Get admin's profile to get company_id
+      const { data: adminProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('user_id', user.id)
+        .single()
+
+      if (profileError || !adminProfile?.company_id) {
+        throw new Error('Admin profile not found or no company associated')
+      }
+
+      // Generate unique invitation token
+      const invitationToken = crypto.randomUUID()
+      
+      // Set expiration date to 7 days from now
+      const expiresAt = new Date()
+      expiresAt.setDate(expiresAt.getDate() + 7)
+      
+      // Create invitation record using service role
+      const { error: invitationError } = await supabaseAdmin
+        .from('user_invitations')
+        .insert({
+          email,
+          company_id: adminProfile.company_id,
+          invited_by: user.id,
+          role: userData.role,
+          full_name: userData.full_name,
+          hourly_rate: userData.hourly_rate,
+          status: 'pending',
+          invitation_token: invitationToken,
+          expires_at: expiresAt.toISOString()
+        })
+        .select()
+        .single()
+
+      if (invitationError) {
+        console.error('Invitation record error:', invitationError)
+        throw invitationError
+      }
+
+      // Get inviter's profile for email
+      const { data: inviterProfile } = await supabaseAdmin
+        .from('profiles')
+        .select('full_name')
+        .eq('user_id', user.id)
+        .single()
+
+      // Get company name for email
+      const { data: company } = await supabaseAdmin
+        .from('companies')
+        .select('name')
+        .eq('id', adminProfile.company_id)
+        .single()
+
+      // Send invitation email using custom email service
+      try {
+        await EmailService.sendInvitationEmail({
+          recipientEmail: email,
+          recipientName: userData.full_name,
+          companyName: company?.name || 'TeamFlow',
+          inviterName: inviterProfile?.full_name || 'TeamFlow Admin',
+          role: userData.role,
+          invitationToken: invitationToken,
+          expiresAt: expiresAt.toISOString()
+        })
+      } catch (emailError) {
+        console.error('Email sending error:', emailError)
+        // Don't throw here - invitation record is already created
+        // Just log the error and continue
       }
     } catch (error) {
       console.error('Error inviting user:', error)

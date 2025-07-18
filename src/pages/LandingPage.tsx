@@ -72,10 +72,10 @@ const LandingPage = () => {
                 Sign In
               </button>
               <button 
-                onClick={() => navigate('/auth')}
+                onClick={() => navigate('/admin-signup')}
                 className="bg-secondary hover:bg-secondary/90 text-white font-semibold py-2 px-6 rounded-lg transition-all duration-200"
               >
-                Start Free Trial
+                Start Your Company
               </button>
             </motion.div>
           </div>
@@ -93,7 +93,7 @@ const LandingPage = () => {
           >
             <div className="inline-flex items-center space-x-2 bg-dark-200 px-4 py-2 rounded-full text-sm text-secondary mb-8">
               <CheckCircle className="w-4 h-4" />
-              <span>New in Beta • Join 1000+ Teams</span>
+              <span>Trusted by 1000+ Companies</span>
             </div>
           </motion.div>
 
@@ -121,10 +121,10 @@ const LandingPage = () => {
             className="flex flex-col sm:flex-row gap-4 justify-center mb-12"
           >
             <button 
-              onClick={() => navigate('/auth')}
+              onClick={() => navigate('/admin-signup')}
               className="bg-secondary hover:bg-secondary/90 text-white font-semibold py-4 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 shadow-lg text-lg flex items-center justify-center space-x-2"
             >
-              <span>Start Your Free Trial</span>
+              <span>Start Your Company</span>
               <ArrowRight className="w-5 h-5" />
             </button>
             <button className="border-2 border-secondary text-secondary hover:bg-secondary hover:text-white font-semibold py-4 px-8 rounded-lg transition-all duration-200 text-lg flex items-center justify-center space-x-2">
@@ -230,16 +230,16 @@ const LandingPage = () => {
               </span>
             </h2>
             <p className="text-xl text-dark-500 mb-8 max-w-2xl mx-auto">
-              Join thousands of teams who have revolutionized their productivity with TeamFlow. Start 
-              your free trial today - no credit card required.
+              Join thousands of companies who have revolutionized their team productivity with TeamFlow. 
+              Start your company account today and invite your team.
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">
               <button 
-                onClick={() => navigate('/auth')}
+                onClick={() => navigate('/admin-signup')}
                 className="bg-secondary hover:bg-secondary/90 text-white font-semibold py-4 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 shadow-lg text-lg"
               >
-                Start Free Trial Now →
+                Start Your Company →
               </button>
               <button className="border-2 border-secondary text-secondary hover:bg-secondary hover:text-white font-semibold py-4 px-8 rounded-lg transition-all duration-200 text-lg">
                 Schedule a Demo

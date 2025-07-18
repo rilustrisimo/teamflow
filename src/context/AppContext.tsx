@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import { useAuth } from './AuthContext'
+import { supabase } from '../lib/supabase'
 import { DatabaseService } from '../lib/database'
 import type { 
   Profile, 
@@ -59,23 +60,27 @@ interface AppContextType {
   tasks: any[]
   clients: Client[]
   projects: any[]
+  teamMembers: Profile[]
   
   // Actions
-  addTimeEntry: (entry: Omit<TimeEntryInsert, 'user_id'>) => Promise<void>
+  addTimeEntry: (entry: Omit<TimeEntryInsert, 'user_id' | 'company_id'>) => Promise<void>
   updateTimeEntry: (id: string, updates: any) => Promise<void>
   deleteTimeEntry: (id: string) => Promise<void>
   
-  addTask: (task: Omit<TaskInsert, 'created_by'>) => Promise<void>
+  addTask: (task: Omit<TaskInsert, 'created_by' | 'company_id'>) => Promise<void>
   updateTask: (id: string, updates: any) => Promise<void>
   deleteTask: (id: string) => Promise<void>
   
-  addClient: (client: Omit<ClientInsert, 'created_by'>) => Promise<void>
+  addClient: (client: Omit<ClientInsert, 'created_by' | 'company_id'>) => Promise<void>
   updateClient: (id: string, updates: any) => Promise<void>
   deleteClient: (id: string) => Promise<void>
   
-  addProject: (project: Omit<ProjectInsert, 'created_by'>) => Promise<void>
+  addProject: (project: Omit<ProjectInsert, 'created_by' | 'company_id'>) => Promise<void>
   updateProject: (id: string, updates: any) => Promise<void>
   deleteProject: (id: string) => Promise<void>
+
+  // Team management
+  inviteUser: (email: string, role: 'manager' | 'team-member' | 'client', fullName?: string) => Promise<void>
 
   // Refresh data
   refreshData: () => Promise<void>
@@ -132,10 +137,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [tasks, setTasks] = useState<any[]>([])
   const [clients, setClients] = useState<Client[]>([])
   const [projects, setProjects] = useState<any[]>([])
+  const [teamMembers, setTeamMembers] = useState<Profile[]>([])
 
   // Load user profile
   useEffect(() => {
-    if (user) {
+    if (user?.id) {
       loadUserProfile()
     } else {
       setCurrentUser(null)
@@ -143,13 +149,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [user])
 
-  // Load data when user is available
+  // Load data when user is available AND properly authenticated
   useEffect(() => {
-    if (currentUser) {
+    if (currentUser?.company_id && user?.id) {
       loadAllData()
       setupRealtimeSubscriptions()
     }
-  }, [currentUser])
+  }, [currentUser, user])
 
   // Timer effect
   useEffect(() => {
@@ -166,7 +172,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [timer.isTracking])
 
   const loadUserProfile = async () => {
-    if (!user) return
+    if (!user?.id) {
+      console.warn('No user ID available for loading profile')
+      setLoading(false)
+      return
+    }
+
+    // Additional check: verify user is actually authenticated
+    try {
+      const { data: { user: currentAuthUser }, error: authError } = await supabase.auth.getUser()
+      if (authError || !currentAuthUser || currentAuthUser.id !== user.id) {
+        console.warn('User not properly authenticated')
+        setCurrentUser(null)
+        setLoading(false)
+        return
+      }
+    } catch (authCheckError) {
+      console.warn('Failed to verify authentication:', authCheckError)
+      setCurrentUser(null)
+      setLoading(false)
+      return
+    }
     
     try {
       const profile = await DatabaseService.getProfile(user.id)
@@ -185,33 +211,59 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       } catch (error) {
         console.log('No user settings found, using defaults')
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading user profile:', error)
+      
+      // Don't try to create profiles manually - this should be handled by signup trigger
+      // For now, just set loading to false and let the user go through proper signup
+      setCurrentUser(null)
+      setLoading(false)
     } finally {
       setLoading(false)
     }
   }
 
   const loadAllData = async () => {
-    if (!currentUser) return
+    if (!currentUser?.company_id) {
+      console.warn('Cannot load data: user not properly associated with company')
+      return
+    }
     
     try {
       setLoading(true)
       
       // Load data based on user role
-      const [clientsData, projectsData, tasksData, timeEntriesData] = await Promise.all([
-        DatabaseService.getClients(),
-        DatabaseService.getProjects(),
-        DatabaseService.getTasks(),
-        currentUser.role === 'team-member' 
+      const [clientsData, projectsData, tasksData, timeEntriesData, teamMembersData] = await Promise.all([
+        DatabaseService.getClients().catch(err => {
+          console.warn('Failed to load clients:', err)
+          return []
+        }),
+        DatabaseService.getProjects().catch(err => {
+          console.warn('Failed to load projects:', err)
+          return []
+        }),
+        DatabaseService.getTasks().catch(err => {
+          console.warn('Failed to load tasks:', err)
+          return []
+        }),
+        (currentUser.role === 'team-member' 
           ? DatabaseService.getTimeEntries(currentUser.id)
           : DatabaseService.getTimeEntries()
+        ).catch(err => {
+          console.warn('Failed to load time entries:', err)
+          return []
+        }),
+        DatabaseService.getAllProfiles().catch(err => {
+          console.warn('Failed to load team members:', err)
+          return []
+        })
       ])
 
       setClients(clientsData || [])
       setProjects(projectsData || [])
       setTasks(tasksData || [])
       setTimeEntries(timeEntriesData || [])
+      setTeamMembers(teamMembersData || [])
     } catch (error) {
       console.error('Error loading data:', error)
     } finally {
@@ -219,16 +271,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }
 
-  const setupRealtimeSubscriptions = () => {
+  const setupRealtimeSubscriptions = async () => {
     if (!currentUser) return
 
     // Subscribe to changes based on user role
-    const subscriptions = [
+    const subscriptions = await Promise.all([
       DatabaseService.subscribeToTable('clients', handleRealtimeUpdate),
       DatabaseService.subscribeToTable('projects', handleRealtimeUpdate),
       DatabaseService.subscribeToTable('tasks', handleRealtimeUpdate),
       DatabaseService.subscribeToTable('time_entries', handleRealtimeUpdate)
-    ]
+    ])
 
     return () => {
       subscriptions.forEach(sub => sub.unsubscribe())
@@ -273,7 +325,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const project = projects.find(p => p.name === timer.selectedProject)
     const task = tasks.find(t => t.title === timer.selectedTask)
     
-    const newEntry: Omit<TimeEntryInsert, 'user_id'> = {
+    const newEntry: Omit<TimeEntryInsert, 'user_id' | 'company_id'> = {
       project_id: project?.id || null,
       task_id: task?.id || null,
       description: timer.description || 'Timer session',
@@ -312,7 +364,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }
 
   // Data actions
-  const addTimeEntry = async (entry: Omit<TimeEntryInsert, 'user_id'>) => {
+  const addTimeEntry = async (entry: Omit<TimeEntryInsert, 'user_id' | 'company_id'>) => {
     if (!currentUser) return
     
     try {
@@ -349,7 +401,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }
 
-  const addTask = async (task: Omit<TaskInsert, 'created_by'>) => {
+  const addTask = async (task: Omit<TaskInsert, 'created_by' | 'company_id'>) => {
     if (!currentUser) return
     
     try {
@@ -386,13 +438,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }
 
-  const addClient = async (client: Omit<ClientInsert, 'created_by'>) => {
+  const addClient = async (client: Omit<ClientInsert, 'created_by' | 'company_id'>) => {
     if (!currentUser) return
     
     try {
       const newClient = await DatabaseService.createClient({
         ...client,
-        created_by: currentUser.id
+        created_by: currentUser.id // This is now nullable so it's safe
       })
       setClients(prev => [newClient, ...prev])
     } catch (error) {
@@ -423,7 +475,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }
 
-  const addProject = async (project: Omit<ProjectInsert, 'created_by'>) => {
+  const addProject = async (project: Omit<ProjectInsert, 'created_by' | 'company_id'>) => {
     if (!currentUser) return
     
     try {
@@ -460,6 +512,29 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }
 
+  // Team management
+  const inviteUser = async (email: string, role: 'manager' | 'team-member' | 'client', fullName?: string) => {
+    if (!currentUser?.company_id || !user?.id) {
+      throw new Error('User not properly authenticated')
+    }
+
+    try {
+      await DatabaseService.createInvitation({
+        company_id: currentUser.company_id,
+        email,
+        role,
+        invited_by: user.id,
+        full_name: fullName || email.split('@')[0] // Use email prefix if no name provided
+      })
+      
+      // Refresh team data
+      await refreshData()
+    } catch (error) {
+      console.error('Error inviting user:', error)
+      throw error
+    }
+  }
+
   const value: AppContextType = {
     loading,
     timer,
@@ -473,6 +548,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     tasks,
     clients,
     projects,
+    teamMembers,
     addTimeEntry,
     updateTimeEntry,
     deleteTimeEntry,
@@ -485,6 +561,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     addProject,
     updateProject,
     deleteProject,
+    inviteUser,
     refreshData
   }
 

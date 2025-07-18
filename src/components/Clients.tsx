@@ -11,7 +11,6 @@ const Clients = () => {
   const [newClient, setNewClient] = useState({
     name: '',
     email: '',
-    company: '',
     phone: ''
   })
 
@@ -45,34 +44,35 @@ const Clients = () => {
     return latestEntry ? latestEntry.start_time : new Date().toISOString()
   }
 
-  const addNewClient = () => {
+  const addNewClient = async () => {
     if (!newClient.name || !newClient.email) {
       alert('Please fill in name and email')
       return
     }
 
     try {
-      addClient({
+      await addClient({
         name: newClient.name,
         email: newClient.email,
-        company: newClient.company || newClient.name,
         phone: newClient.phone,
-        status: 'active'
+        address: null
       })
 
-      setNewClient({ name: '', email: '', company: '', phone: '' })
+      setNewClient({ name: '', email: '', phone: '' })
       setShowAddClientModal(false)
       alert(`Client "${newClient.name}" added successfully!`)
     } catch (error) {
       console.error('Error adding client:', error)
+      alert('Error adding client. Please try again.')
     }
   }
 
-  const updateClientField = (clientId: string, field: string, value: any) => {
+  const updateClientField = async (clientId: string, field: string, value: any) => {
     try {
-      updateClient(clientId, { [field]: value })
+      await updateClient(clientId, { [field]: value })
     } catch (error) {
       console.error('Error updating client:', error)
+      alert('Error updating client. Please try again.')
     }
   }
 
@@ -81,20 +81,19 @@ const Clients = () => {
     alert('Client information updated successfully!')
   }
 
-  const handleDeleteClient = (clientId: string) => {
+  const handleDeleteClient = async (clientId: string) => {
     if (confirm('Are you sure you want to delete this client?')) {
       try {
-        deleteClient(clientId)
+        await deleteClient(clientId)
         alert('Client deleted successfully!')
       } catch (error) {
         console.error('Error deleting client:', error)
+        alert('Error deleting client. Please try again.')
       }
     }
   }
 
-  const getStatusColor = (status: string) => {
-    return status === 'active' ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'
-  }
+
 
   return (
     <div className="space-y-6">
@@ -130,7 +129,7 @@ const Clients = () => {
             <div>
               <p className="text-dark-500 text-sm">Active Clients</p>
               <p className="text-2xl font-bold text-green-400">
-                {clients.filter(c => c.status === 'active').length}
+                {clients.length}
               </p>
             </div>
             <FileText className="w-8 h-8 text-green-500" />
@@ -171,7 +170,6 @@ const Clients = () => {
                 <th className="text-left py-4 px-6 text-dark-500 font-medium uppercase text-xs tracking-wider">Client</th>
                 <th className="text-left py-4 px-6 text-dark-500 font-medium uppercase text-xs tracking-wider">Contact</th>
                 <th className="text-left py-4 px-6 text-dark-500 font-medium uppercase text-xs tracking-wider">Company</th>
-                <th className="text-left py-4 px-6 text-dark-500 font-medium uppercase text-xs tracking-wider">Status</th>
                 <th className="text-left py-4 px-6 text-dark-500 font-medium uppercase text-xs tracking-wider">Hours</th>
                 <th className="text-left py-4 px-6 text-dark-500 font-medium uppercase text-xs tracking-wider">Projects</th>
                 <th className="text-left py-4 px-6 text-dark-500 font-medium uppercase text-xs tracking-wider">Revenue</th>
@@ -233,28 +231,12 @@ const Clients = () => {
                     {editingClient === client.id ? (
                       <input
                         type="text"
-                        value={client.company}
-                        onChange={(e) => updateClientField(client.id, 'company', e.target.value)}
+                        value={client.phone || ''}
+                        onChange={(e) => updateClientField(client.id, 'phone', e.target.value)}
                         className="w-full bg-dark-400 border border-dark-500 rounded px-3 py-1 text-white text-sm"
                       />
                     ) : (
-                      <span className="text-white">{client.company}</span>
-                    )}
-                  </td>
-                  <td className="py-4 px-6">
-                    {editingClient === client.id ? (
-                      <select
-                        value={client.status}
-                        onChange={(e) => updateClientField(client.id, 'status', e.target.value)}
-                        className="bg-dark-400 border border-dark-500 rounded px-3 py-1 text-white text-sm"
-                      >
-                        <option value="active">Active</option>
-                        <option value="inactive">Inactive</option>
-                      </select>
-                    ) : (
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(client.status)}`}>
-                        {client.status.charAt(0).toUpperCase() + client.status.slice(1)}
-                      </span>
+                      <span className="text-white">{client.phone || 'N/A'}</span>
                     )}
                   </td>
                   <td className="py-4 px-6">
@@ -377,17 +359,6 @@ const Clients = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-dark-500 mb-2">Company</label>
-                <input
-                  type="text"
-                  value={newClient.company}
-                  onChange={(e) => setNewClient({...newClient, company: e.target.value})}
-                  className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
-                  placeholder="Company name"
-                />
-              </div>
-
-              <div>
                 <label className="block text-sm font-medium text-dark-500 mb-2">Phone</label>
                 <input
                   type="tel"
@@ -450,17 +421,7 @@ const Clients = () => {
                         <span className="text-white">{selectedClient.phone}</span>
                       </div>
                     )}
-                    <div className="flex items-center space-x-2 text-sm">
-                      <Building className="w-4 h-4 text-dark-500" />
-                      <span className="text-white">{selectedClient.company}</span>
-                    </div>
                   </div>
-                </div>
-                <div>
-                  <h4 className="font-medium text-white mb-2">Status</h4>
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(selectedClient.status)}`}>
-                    {selectedClient.status.charAt(0).toUpperCase() + selectedClient.status.slice(1)}
-                  </span>
                 </div>
               </div>
 

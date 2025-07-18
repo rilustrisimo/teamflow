@@ -70,7 +70,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           data: {
             full_name: userData.fullName,
             company_name: userData.companyName,
-            role: userData.role
+            role: userData.role,
+            is_admin_signup: true // Flag for trigger validation
           }
         }
       })
@@ -80,6 +81,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return { error }
       }
 
+      // If signup was successful but user is not immediately available (email confirmation required),
+      // the trigger should handle profile creation. If there's an issue with the trigger,
+      // we could fall back to manual profile creation here using service role.
+      
       console.log('Sign up successful:', data)
       return { error: null }
     } catch (error) {

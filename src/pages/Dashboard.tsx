@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation, Routes, Route } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useAppContext } from '../context/AppContext'
 import { useRoleBasedNavigation } from '../hooks/useRoleBasedNavigation'
@@ -9,7 +9,8 @@ import TeamMemberDashboard from '../components/dashboards/TeamMemberDashboard'
 import ClientDashboard from '../components/dashboards/ClientDashboard'
 import UserManagement from '../components/admin/UserManagement'
 import TimeTracker from '../components/TimeTracker'
-import ProjectBoard from '../components/ProjectBoard'
+import Projects from '../components/Projects'
+import Tasks from '../components/Tasks'
 import Reports from '../components/Reports'
 import Invoices from '../components/Invoices'
 import Clients from '../components/Clients'
@@ -24,12 +25,16 @@ import {
 
 const Dashboard = () => {
   const navigate = useNavigate()
+  const location = useLocation()
   const { signOut } = useAuth()
   const { currentUser } = useAppContext()
   const navigationItems = useRoleBasedNavigation()
   
-  const [activeTab, setActiveTab] = useState('dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  // Get current active tab from URL
+  const currentPath = location.pathname.split('/').pop() || 'dashboard'
+  const activeTab = currentPath === 'dashboard' ? 'dashboard' : currentPath
 
   // Handle sign out
   const handleSignOut = async () => {
@@ -37,91 +42,14 @@ const Dashboard = () => {
     navigate('/auth')
   }
 
-  // Render the appropriate dashboard based on user role
-  const renderDashboardContent = () => {
-    if (!currentUser) {
-      return (
-        <div className="flex items-center justify-center h-64">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
-            <p className="mt-2 text-gray-500">Loading...</p>
-          </div>
-        </div>
-      )
+  // Navigate to a specific tab
+  const navigateToTab = (tabId: string) => {
+    if (tabId === 'dashboard') {
+      navigate('/dashboard')
+    } else {
+      navigate(`/dashboard/${tabId}`)
     }
-
-    switch (activeTab) {
-      case 'dashboard':
-        switch (currentUser.role) {
-          case 'admin':
-            return <AdminDashboard />
-          case 'team-member':
-            return <TeamMemberDashboard />
-          case 'client':
-            return <ClientDashboard />
-          default:
-            return <div>Unknown role</div>
-        }
-      
-      case 'users':
-        return (
-          <RoleBasedRoute page="user-management">
-            <UserManagement />
-          </RoleBasedRoute>
-        )
-      
-      case 'timetracker':
-        return (
-          <RoleBasedRoute page="time-tracker">
-            <TimeTracker />
-          </RoleBasedRoute>
-        )
-      
-      case 'tasks':
-      case 'projects':
-        return <ProjectBoard />
-      
-      case 'reports':
-        return (
-          <RoleBasedRoute page="reports">
-            <Reports />
-          </RoleBasedRoute>
-        )
-      
-      case 'invoices':
-        return (
-          <RoleBasedRoute page="invoices">
-            <Invoices />
-          </RoleBasedRoute>
-        )
-      
-      case 'clients':
-        return (
-          <RoleBasedRoute page="clients">
-            <Clients />
-          </RoleBasedRoute>
-        )
-      
-      case 'financial':
-        return (
-          <RoleBasedRoute page="financial">
-            <FinancialDashboard />
-          </RoleBasedRoute>
-        )
-      
-      case 'settings':
-        return (
-          <RoleBasedRoute page="settings">
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-              <h2 className="text-lg font-semibold mb-4">Settings</h2>
-              <p className="text-gray-500">Settings interface will be implemented here.</p>
-            </div>
-          </RoleBasedRoute>
-        )
-      
-      default:
-        return <div>Page not found</div>
-    }
+    setSidebarOpen(false)
   }
 
   return (
@@ -160,7 +88,7 @@ const Dashboard = () => {
             {navigationItems.map((item) => (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => navigateToTab(item.id)}
                 className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-left transition-colors ${
                   activeTab === item.id
                     ? 'bg-blue-50 text-blue-600'
@@ -199,7 +127,11 @@ const Dashboard = () => {
                 <Menu className="w-5 h-5" />
               </button>
               <h1 className="text-xl font-semibold text-gray-900 capitalize">
-                {activeTab === 'dashboard' ? `${currentUser?.role || 'User'} Dashboard` : activeTab}
+                {activeTab === 'dashboard' ? `${currentUser?.role || 'User'} Dashboard` : 
+                 activeTab === 'users' ? 'User Management' :
+                 activeTab === 'timetracker' ? 'Time Tracker' :
+                 activeTab === 'financial' ? 'Financial Dashboard' :
+                 activeTab}
               </h1>
             </div>
             <div className="flex items-center space-x-4">
@@ -215,7 +147,63 @@ const Dashboard = () => {
 
         {/* Content */}
         <div className="flex-1 overflow-auto p-6">
-          {renderDashboardContent()}
+          <Routes>
+            <Route path="/" element={
+              currentUser ? (
+                currentUser.role === 'admin' ? <AdminDashboard /> :
+                currentUser.role === 'team-member' ? <TeamMemberDashboard /> :
+                currentUser.role === 'client' ? <ClientDashboard /> :
+                <div>Unknown role</div>
+              ) : (
+                <div className="flex items-center justify-center h-64">
+                  <div className="text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
+                    <p className="mt-2 text-gray-500">Loading...</p>
+                  </div>
+                </div>
+              )
+            } />
+            <Route path="/users" element={
+              <RoleBasedRoute page="user-management">
+                <UserManagement />
+              </RoleBasedRoute>
+            } />
+            <Route path="/timetracker" element={
+              <RoleBasedRoute page="time-tracker">
+                <TimeTracker />
+              </RoleBasedRoute>
+            } />
+            <Route path="/projects" element={<Projects />} />
+            <Route path="/tasks" element={<Tasks />} />
+            <Route path="/reports" element={
+              <RoleBasedRoute page="reports">
+                <Reports />
+              </RoleBasedRoute>
+            } />
+            <Route path="/invoices" element={
+              <RoleBasedRoute page="invoices">
+                <Invoices />
+              </RoleBasedRoute>
+            } />
+            <Route path="/clients" element={
+              <RoleBasedRoute page="clients">
+                <Clients />
+              </RoleBasedRoute>
+            } />
+            <Route path="/financial" element={
+              <RoleBasedRoute page="financial">
+                <FinancialDashboard />
+              </RoleBasedRoute>
+            } />
+            <Route path="/settings" element={
+              <RoleBasedRoute page="settings">
+                <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+                  <h2 className="text-lg font-semibold mb-4">Settings</h2>
+                  <p className="text-gray-500">Settings interface will be implemented here.</p>
+                </div>
+              </RoleBasedRoute>
+            } />
+          </Routes>
         </div>
       </div>
 

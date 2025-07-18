@@ -9,10 +9,91 @@ export type Json =
 export interface Database {
   public: {
     Tables: {
+      companies: {
+        Row: {
+          id: string
+          name: string
+          slug: string
+          admin_id: string
+          subscription_plan: string
+          max_users: number
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          slug: string
+          admin_id: string
+          subscription_plan?: string
+          max_users?: number
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          slug?: string
+          admin_id?: string
+          subscription_plan?: string
+          max_users?: number
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      user_invitations: {
+        Row: {
+          id: string
+          company_id: string
+          email: string
+          role: 'admin' | 'manager' | 'team-member' | 'client'
+          invited_by: string
+          invitation_token: string
+          expires_at: string
+          accepted_at: string | null
+          created_at: string
+          full_name: string
+          hourly_rate: number | null
+          status: 'pending' | 'accepted' | 'rejected' | 'expired'
+        }
+        Insert: {
+          id?: string
+          company_id: string
+          email: string
+          role: 'admin' | 'manager' | 'team-member' | 'client'
+          invited_by: string
+          invitation_token?: string
+          expires_at?: string
+          accepted_at?: string | null
+          created_at?: string
+          full_name: string
+          hourly_rate?: number | null
+          status?: 'pending' | 'accepted' | 'rejected' | 'expired'
+        }
+        Update: {
+          id?: string
+          company_id?: string
+          email?: string
+          role?: 'admin' | 'manager' | 'team-member' | 'client'
+          invited_by?: string
+          invitation_token?: string
+          expires_at?: string
+          accepted_at?: string | null
+          created_at?: string
+          full_name?: string
+          hourly_rate?: number | null
+          status?: 'pending' | 'accepted' | 'rejected' | 'expired'
+        }
+      }
       profiles: {
         Row: {
           id: string
+          company_id: string
           full_name: string
+          email: string
           company_name: string | null
           role: 'admin' | 'manager' | 'team-member' | 'client'
           hourly_rate: number | null
@@ -23,7 +104,9 @@ export interface Database {
         }
         Insert: {
           id: string
+          company_id: string
           full_name: string
+          email: string
           company_name?: string | null
           role?: 'admin' | 'manager' | 'team-member' | 'client'
           hourly_rate?: number | null
@@ -34,7 +117,9 @@ export interface Database {
         }
         Update: {
           id?: string
+          company_id?: string
           full_name?: string
+          email?: string
           company_name?: string | null
           role?: 'admin' | 'manager' | 'team-member' | 'client'
           hourly_rate?: number | null
@@ -47,36 +132,33 @@ export interface Database {
       clients: {
         Row: {
           id: string
+          company_id: string
           name: string
           email: string
-          company: string
           phone: string | null
           address: string | null
-          status: string
           created_by: string | null
           created_at: string
           updated_at: string
         }
         Insert: {
           id?: string
+          company_id: string
           name: string
           email: string
-          company: string
           phone?: string | null
           address?: string | null
-          status?: string
           created_by?: string | null
           created_at?: string
           updated_at?: string
         }
         Update: {
           id?: string
+          company_id?: string
           name?: string
           email?: string
-          company?: string
           phone?: string | null
           address?: string | null
-          status?: string
           created_by?: string | null
           created_at?: string
           updated_at?: string
@@ -85,6 +167,7 @@ export interface Database {
       projects: {
         Row: {
           id: string
+          company_id: string
           name: string
           description: string | null
           client_id: string | null
@@ -97,6 +180,7 @@ export interface Database {
         }
         Insert: {
           id?: string
+          company_id: string
           name: string
           description?: string | null
           client_id?: string | null
@@ -109,6 +193,7 @@ export interface Database {
         }
         Update: {
           id?: string
+          company_id?: string
           name?: string
           description?: string | null
           client_id?: string | null
@@ -123,6 +208,7 @@ export interface Database {
       tasks: {
         Row: {
           id: string
+          company_id: string
           title: string
           description: string | null
           project_id: string | null
@@ -138,6 +224,7 @@ export interface Database {
         }
         Insert: {
           id?: string
+          company_id: string
           title: string
           description?: string | null
           project_id?: string | null
@@ -153,6 +240,7 @@ export interface Database {
         }
         Update: {
           id?: string
+          company_id?: string
           title?: string
           description?: string | null
           project_id?: string | null
@@ -170,6 +258,7 @@ export interface Database {
       task_checklist: {
         Row: {
           id: string
+          company_id: string
           task_id: string | null
           text: string
           completed: boolean | null
@@ -177,6 +266,7 @@ export interface Database {
         }
         Insert: {
           id?: string
+          company_id: string
           task_id?: string | null
           text: string
           completed?: boolean | null
@@ -184,6 +274,7 @@ export interface Database {
         }
         Update: {
           id?: string
+          company_id?: string
           task_id?: string | null
           text?: string
           completed?: boolean | null
@@ -193,6 +284,7 @@ export interface Database {
       task_comments: {
         Row: {
           id: string
+          company_id: string
           task_id: string | null
           author_id: string | null
           text: string
@@ -200,6 +292,7 @@ export interface Database {
         }
         Insert: {
           id?: string
+          company_id: string
           task_id?: string | null
           author_id?: string | null
           text: string
@@ -207,6 +300,7 @@ export interface Database {
         }
         Update: {
           id?: string
+          company_id?: string
           task_id?: string | null
           author_id?: string | null
           text?: string
@@ -216,6 +310,7 @@ export interface Database {
       time_entries: {
         Row: {
           id: string
+          company_id: string
           user_id: string | null
           project_id: string | null
           task_id: string | null
@@ -229,6 +324,7 @@ export interface Database {
         }
         Insert: {
           id?: string
+          company_id: string
           user_id?: string | null
           project_id?: string | null
           task_id?: string | null
@@ -242,6 +338,7 @@ export interface Database {
         }
         Update: {
           id?: string
+          company_id?: string
           user_id?: string | null
           project_id?: string | null
           task_id?: string | null
@@ -257,6 +354,7 @@ export interface Database {
       invoices: {
         Row: {
           id: string
+          company_id: string
           invoice_number: string
           client_id: string | null
           status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled'
@@ -271,6 +369,7 @@ export interface Database {
         }
         Insert: {
           id?: string
+          company_id: string
           invoice_number: string
           client_id?: string | null
           status?: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled'
@@ -285,6 +384,7 @@ export interface Database {
         }
         Update: {
           id?: string
+          company_id?: string
           invoice_number?: string
           client_id?: string | null
           status?: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled'
@@ -301,6 +401,7 @@ export interface Database {
       invoice_items: {
         Row: {
           id: string
+          company_id: string
           invoice_id: string | null
           description: string
           hours: number
@@ -310,6 +411,7 @@ export interface Database {
         }
         Insert: {
           id?: string
+          company_id: string
           invoice_id?: string | null
           description: string
           hours: number
@@ -319,6 +421,7 @@ export interface Database {
         }
         Update: {
           id?: string
+          company_id?: string
           invoice_id?: string | null
           description?: string
           hours?: number
@@ -330,6 +433,7 @@ export interface Database {
       user_settings: {
         Row: {
           id: string
+          company_id: string
           user_id: string | null
           work_schedule: Json | null
           reminder_enabled: boolean | null
@@ -339,6 +443,7 @@ export interface Database {
         }
         Insert: {
           id?: string
+          company_id: string
           user_id?: string | null
           work_schedule?: Json | null
           reminder_enabled?: boolean | null
@@ -348,6 +453,7 @@ export interface Database {
         }
         Update: {
           id?: string
+          company_id?: string
           user_id?: string | null
           work_schedule?: Json | null
           reminder_enabled?: boolean | null

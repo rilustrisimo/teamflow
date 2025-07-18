@@ -179,7 +179,7 @@ const TimeTracker = () => {
                 >
                   <option value="">Select a client</option>
                   {clients.map(client => (
-                    <option key={client.id} value={client.company}>{client.company}</option>
+                    <option key={client.id} value={client.name}>{client.name}</option>
                   ))}
                 </select>
               </div>
@@ -309,7 +309,7 @@ const TimeTracker = () => {
                               className="bg-dark-400 border border-dark-500 rounded px-3 py-1 text-white text-sm"
                             >
                               {clients.map(client => (
-                                <option key={client.id} value={client.company}>{client.company}</option>
+                                <option key={client.id} value={client.name}>{client.name}</option>
                               ))}
                             </select>
                             <select
@@ -443,7 +443,7 @@ const TimeTracker = () => {
                 >
                   <option value="">Select a client</option>
                   {clients.map(client => (
-                    <option key={client.id} value={client.company}>{client.company}</option>
+                    <option key={client.id} value={client.name}>{client.name}</option>
                   ))}
                 </select>
               </div>
