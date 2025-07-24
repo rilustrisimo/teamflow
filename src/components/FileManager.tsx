@@ -188,7 +188,7 @@ const FileManager: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">File Manager</h2>
+          <h2 className="text-2xl font-bold text-gray-800">File Manager</h2>
           <p className="text-gray-400">Manage and organize your files</p>
         </div>
         <div className="flex items-center space-x-2">
@@ -284,7 +284,7 @@ const FileManager: React.FC = () => {
               placeholder="Search files..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="bg-gray-700 border border-gray-600 rounded-lg pl-10 pr-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
+              className="bg-gray-100 border border-gray-300 rounded-lg pl-10 pr-4 py-2 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-blue-500"
             />
           </div>
           <div className="flex items-center space-x-2">
@@ -292,7 +292,7 @@ const FileManager: React.FC = () => {
             <select
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
-              className="bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+              className="bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:border-blue-500"
             >
               <option value="all">All Types</option>
               <option value="images">Images</option>

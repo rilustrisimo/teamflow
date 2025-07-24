@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useAppContext } from '../context/AppContext'
-import { Clock, DollarSign, Download, Calendar, Filter } from 'lucide-react'
+import { Clock, DollarSign, Download, Calendar, Filter, Loader2 } from 'lucide-react'
 
 const Reports = () => {
-  const { currentUser, timeEntries } = useAppContext()
+  const { currentUser, timeEntries, loading } = useAppContext()
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
 
@@ -30,7 +30,7 @@ const Reports = () => {
   }
 
   const filteredEntries = getFilteredEntries()
-  const totalHours = filteredEntries.reduce((sum, entry) => sum + entry.duration, 0)
+  const totalHours = filteredEntries.reduce((sum, entry) => sum + (entry.duration / 60), 0) // Convert minutes to hours
   const totalEarnings = totalHours * (currentUser?.hourly_rate || 0)
 
   // Group entries by project/task for detailed view
@@ -40,7 +40,7 @@ const Reports = () => {
       if (!acc[key]) {
         acc[key] = { duration: 0, entries: [] }
       }
-      acc[key].duration += entry.duration
+      acc[key].duration += entry.duration / 60 // Convert minutes to hours
       acc[key].entries.push(entry)
       return acc
     }, {} as Record<string, { duration: number; entries: any[] }>)
@@ -64,7 +64,7 @@ const Reports = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">My Earnings Report</h2>
+          <h2 className="text-2xl font-bold text-gray-800">My Earnings Report</h2>
           <p className="text-dark-500">Track your hours and earnings</p>
         </div>
         <button className="flex items-center space-x-2 bg-secondary hover:bg-secondary/90 text-white px-4 py-2 rounded-lg transition-colors duration-200">
@@ -87,14 +87,14 @@ const Reports = () => {
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="bg-dark-300 border border-dark-400 rounded px-3 py-1 text-white text-sm"
+              className="bg-gray-100 border border-gray-300 rounded px-3 py-1 text-gray-900 text-sm"
             />
             <span className="text-dark-500">to</span>
             <input
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="bg-dark-300 border border-dark-400 rounded px-3 py-1 text-white text-sm"
+              className="bg-gray-100 border border-gray-300 rounded px-3 py-1 text-gray-900 text-sm"
             />
           </div>
 
@@ -110,7 +110,14 @@ const Reports = () => {
       </div>
 
       {/* Summary Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-12 bg-dark-200 rounded-xl border border-dark-300">
+          <Loader2 className="w-8 h-8 animate-spin text-secondary mb-3" />
+          <span className="text-dark-500">Loading reports...</span>
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-dark-200 rounded-xl p-6 border border-dark-300">
           <div className="flex items-center justify-between">
             <div>
@@ -145,7 +152,7 @@ const Reports = () => {
       {/* Detailed Breakdown Table */}
       <div className="bg-dark-200 rounded-xl border border-dark-300 overflow-hidden">
         <div className="p-6 border-b border-dark-300">
-          <h3 className="text-xl font-semibold text-white">Detailed Breakdown</h3>
+          <h3 className="text-xl font-semibold text-gray-800">Detailed Breakdown</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -184,6 +191,8 @@ const Reports = () => {
           </div>
         )}
       </div>
+        </>
+      )}
     </div>
   )
 }

@@ -21,13 +21,13 @@ const ClientDashboard = () => {
     currentUser 
   } = useAppContext()
 
-  // Filter data for current client
+  // Filter data for current client (excluding archived)
   const myProjects = projects.filter(project => 
-    project.client_id === currentUser?.company_name // This should be company_id when we have proper relations
+    project.client_id === currentUser?.company_name && !project.archived // This should be company_id when we have proper relations
   )
   
   const myTasks = tasks.filter(task => 
-    myProjects.some(project => project.id === task.project_id)
+    myProjects.some(project => project.id === task.project_id) && !task.archived
   )
   
   const myTimeEntries = timeEntries.filter(entry => 

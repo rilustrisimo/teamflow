@@ -101,14 +101,14 @@ const FinancialDashboard = () => {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-bold text-white">My Earnings</h2>
+            <h2 className="text-2xl font-bold text-gray-800">My Earnings</h2>
             <p className="text-dark-500">Track your hours and earnings</p>
           </div>
           <div className="flex items-center space-x-4">
             <select
               value={viewType}
               onChange={(e) => setViewType(e.target.value as 'monthly' | 'ytd')}
-              className="bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+              className="bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
             >
               <option value="monthly">Monthly View</option>
               <option value="ytd">Year to Date</option>
@@ -117,7 +117,7 @@ const FinancialDashboard = () => {
               <select
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(Number(e.target.value))}
-                className="bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                className="bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
               >
                 {months.map((month, index) => (
                   <option key={index} value={index}>{month}</option>
@@ -168,7 +168,7 @@ const FinancialDashboard = () => {
 
         {/* Earnings Breakdown */}
         <div className="bg-dark-200 rounded-xl p-6 border border-dark-300">
-          <h3 className="text-xl font-semibold text-white mb-4">Earnings Breakdown</h3>
+          <h3 className="text-xl font-semibold text-gray-800 mb-4">Earnings Breakdown</h3>
           <div className="space-y-4">
             <div className="flex justify-between items-center py-3 border-b border-dark-300">
               <span className="text-dark-500">Base Hours</span>
@@ -197,14 +197,14 @@ const FinancialDashboard = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">Financial Dashboard</h2>
+          <h2 className="text-2xl font-bold text-gray-800">Financial Dashboard</h2>
           <p className="text-dark-500">Revenue, expenses, and team payouts overview</p>
         </div>
         <div className="flex items-center space-x-4">
           <select
             value={viewType}
             onChange={(e) => setViewType(e.target.value as 'monthly' | 'ytd')}
-            className="bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+            className="bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
           >
             <option value="monthly">Monthly View</option>
             <option value="ytd">Year to Date</option>
@@ -213,7 +213,7 @@ const FinancialDashboard = () => {
             <select
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(Number(e.target.value))}
-              className="bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+              className="bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
             >
               {months.map((month, index) => (
                 <option key={index} value={index}>{month}</option>
@@ -223,7 +223,7 @@ const FinancialDashboard = () => {
           <select
             value={selectedYear}
             onChange={(e) => setSelectedYear(Number(e.target.value))}
-            className="bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+            className="bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
           >
             {getAvailableYears().map(year => (
               <option key={year} value={year}>{year}</option>
@@ -282,7 +282,7 @@ const FinancialDashboard = () => {
       <div className="grid lg:grid-cols-2 gap-8">
         {/* Revenue Breakdown */}
         <div className="bg-dark-200 rounded-xl p-6 border border-dark-300">
-          <h3 className="text-xl font-semibold text-white mb-4">Revenue Sources</h3>
+          <h3 className="text-xl font-semibold text-gray-800 mb-4">Revenue Sources</h3>
           <div className="space-y-4">
             {clients.map((client) => {
               const clientRevenue = mockInvoices
@@ -317,7 +317,7 @@ const FinancialDashboard = () => {
 
         {/* Team Member Payouts */}
         <div className="bg-dark-200 rounded-xl p-6 border border-dark-300">
-          <h3 className="text-xl font-semibold text-white mb-4">Team Payouts</h3>
+          <h3 className="text-xl font-semibold text-gray-800 mb-4">Team Payouts</h3>
           <div className="space-y-4">
             {teamMembers.map((member) => {
               const payout = viewType === 'monthly' ? member.monthlyPayout : member.ytdPayout
@@ -343,7 +343,7 @@ const FinancialDashboard = () => {
       {/* Detailed Financial Table */}
       <div className="bg-dark-200 rounded-xl border border-dark-300 overflow-hidden">
         <div className="p-6 border-b border-dark-300">
-          <h3 className="text-xl font-semibold text-white">Financial Summary</h3>
+          <h3 className="text-xl font-semibold text-gray-800">Financial Summary</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">

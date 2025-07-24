@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { useAppContext } from '../context/AppContext'
-import { Plus, Edit, Mail, Phone, Building, Clock, FileText, X, Save, Eye, MoreHorizontal } from 'lucide-react'
+import { Plus, Edit, Mail, Phone, Building, Clock, FileText, X, Save, Eye, MoreHorizontal, Loader2 } from 'lucide-react'
 
 const Clients = () => {
-  const { clients, addClient, updateClient, deleteClient, projects, timeEntries } = useAppContext()
+  const { clients, addClient, updateClient, deleteClient, projects, timeEntries, loading } = useAppContext()
   const [showAddClientModal, setShowAddClientModal] = useState(false)
   const [editingClient, setEditingClient] = useState<string | null>(null)
   const [selectedClient, setSelectedClient] = useState<any>(null)
@@ -14,9 +14,9 @@ const Clients = () => {
     phone: ''
   })
 
-  // Helper functions to calculate metrics
+  // Helper functions to calculate metrics (excluding archived projects)
   const getClientTotalHours = (clientId: string) => {
-    const clientProjects = projects.filter(p => p.client_id === clientId)
+    const clientProjects = projects.filter(p => p.client_id === clientId && !p.archived)
     const projectIds = clientProjects.map(p => p.id)
     return timeEntries
       .filter(entry => projectIds.includes(entry.project_id || ''))
@@ -24,19 +24,19 @@ const Clients = () => {
   }
 
   const getClientActiveProjects = (clientId: string) => {
-    return projects.filter(p => p.client_id === clientId && p.status === 'active').length
+    return projects.filter(p => p.client_id === clientId && p.status === 'active' && !p.archived).length
   }
 
   const getClientTotalRevenue = (clientId: string) => {
-    const clientProjects = projects.filter(p => p.client_id === clientId)
+    const clientProjects = projects.filter(p => p.client_id === clientId && !p.archived)
     const projectIds = clientProjects.map(p => p.id)
     return timeEntries
       .filter(entry => projectIds.includes(entry.project_id || ''))
-      .reduce((sum, entry) => sum + (entry.duration || 0) * 50, 0) // Assuming $50/hour rate
+      .reduce((sum, entry) => sum + ((entry.duration || 0) / 60) * 50, 0) // Convert minutes to hours, assuming $50/hour rate
   }
 
   const getClientLastActivity = (clientId: string) => {
-    const clientProjects = projects.filter(p => p.client_id === clientId)
+    const clientProjects = projects.filter(p => p.client_id === clientId && !p.archived)
     const projectIds = clientProjects.map(p => p.id)
     const latestEntry = timeEntries
       .filter(entry => projectIds.includes(entry.project_id || ''))
@@ -100,7 +100,7 @@ const Clients = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">Clients</h2>
+          <h2 className="text-2xl font-bold text-gray-800">Clients</h2>
           <p className="text-dark-500">Manage your client relationships and track project progress</p>
         </div>
         <button
@@ -178,7 +178,27 @@ const Clients = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-dark-300">
-              {clients.map((client) => (
+              {loading ? (
+                <tr>
+                  <td colSpan={8} className="py-12 text-center">
+                    <div className="flex items-center justify-center space-x-2">
+                      <Loader2 className="w-6 h-6 text-secondary animate-spin" />
+                      <span className="text-dark-500">Loading clients...</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : clients.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-12 text-center">
+                    <div className="text-dark-500">
+                      <Building className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                      <p>No clients found</p>
+                      <p className="text-sm mt-2">Add your first client to get started</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                clients.map((client) => (
                 <tr key={client.id} className="hover:bg-dark-300/30 transition-colors duration-200">
                   <td className="py-4 px-6">
                     {editingClient === client.id ? (
@@ -304,17 +324,11 @@ const Clients = () => {
                     </div>
                   </td>
                 </tr>
-              ))}
+              ))
+              )}
             </tbody>
           </table>
         </div>
-        
-        {clients.length === 0 && (
-          <div className="text-center py-12">
-            <Building className="w-12 h-12 text-dark-500 mx-auto mb-4" />
-            <p className="text-dark-500">No clients found</p>
-          </div>
-        )}
       </div>
 
       {/* Add Client Modal */}
@@ -326,7 +340,7 @@ const Clients = () => {
             className="bg-dark-200 rounded-xl p-6 max-w-md w-full"
           >
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-white">Add New Client</h3>
+              <h3 className="text-xl font-bold text-gray-800">Add New Client</h3>
               <button
                 onClick={() => setShowAddClientModal(false)}
                 className="text-dark-500 hover:text-white"
@@ -342,7 +356,7 @@ const Clients = () => {
                   type="text"
                   value={newClient.name}
                   onChange={(e) => setNewClient({...newClient, name: e.target.value})}
-                  className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
                   placeholder="Enter client name"
                 />
               </div>
@@ -353,7 +367,7 @@ const Clients = () => {
                   type="email"
                   value={newClient.email}
                   onChange={(e) => setNewClient({...newClient, email: e.target.value})}
-                  className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
                   placeholder="client@example.com"
                 />
               </div>
@@ -364,7 +378,7 @@ const Clients = () => {
                   type="tel"
                   value={newClient.phone}
                   onChange={(e) => setNewClient({...newClient, phone: e.target.value})}
-                  className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
                   placeholder="+1 (555) 123-4567"
                 />
               </div>
@@ -397,7 +411,7 @@ const Clients = () => {
             className="bg-dark-200 rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-white">{selectedClient.name}</h3>
+              <h3 className="text-xl font-bold text-gray-800">{selectedClient.name}</h3>
               <button
                 onClick={() => setSelectedClient(null)}
                 className="text-dark-500 hover:text-white"
@@ -409,7 +423,7 @@ const Clients = () => {
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-6">
                 <div>
-                  <h4 className="font-medium text-white mb-2">Contact Information</h4>
+                  <h4 className="font-medium text-gray-700 mb-2">Contact Information</h4>
                   <div className="space-y-2">
                     <div className="flex items-center space-x-2 text-sm">
                       <Mail className="w-4 h-4 text-dark-500" />
@@ -450,7 +464,7 @@ const Clients = () => {
               </div>
 
               <div>
-                <h4 className="font-medium text-white mb-2">Last Activity</h4>
+                <h4 className="font-medium text-gray-700 mb-2">Last Activity</h4>
                 <p className="text-dark-500">{new Date(selectedClient.lastActivity).toLocaleDateString()}</p>
               </div>
             </div>

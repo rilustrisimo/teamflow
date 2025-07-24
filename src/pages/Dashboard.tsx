@@ -11,6 +11,7 @@ import UserManagement from '../components/admin/UserManagement'
 import TimeTracker from '../components/TimeTracker'
 import Projects from '../components/Projects'
 import Tasks from '../components/Tasks'
+import TaskBoard from '../components/TaskBoard'
 import Reports from '../components/Reports'
 import Invoices from '../components/Invoices'
 import Clients from '../components/Clients'
@@ -20,14 +21,15 @@ import {
   Search,
   LogOut,
   Menu,
-  X
+  X,
+  Clock
 } from 'lucide-react'
 
 const Dashboard = () => {
   const navigate = useNavigate()
   const location = useLocation()
   const { signOut } = useAuth()
-  const { currentUser } = useAppContext()
+  const { currentUser, timer } = useAppContext()
   const navigationItems = useRoleBasedNavigation()
   
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -35,6 +37,14 @@ const Dashboard = () => {
   // Get current active tab from URL
   const currentPath = location.pathname.split('/').pop() || 'dashboard'
   const activeTab = currentPath === 'dashboard' ? 'dashboard' : currentPath
+
+  // Helper functions for timer display
+  const formatTimerTime = (seconds: number) => {
+    const hours = Math.floor(seconds / 3600)
+    const minutes = Math.floor((seconds % 3600) / 60)
+    const secs = seconds % 60
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+  }
 
   // Handle sign out
   const handleSignOut = async () => {
@@ -85,6 +95,28 @@ const Dashboard = () => {
 
           {/* Navigation */}
           <nav className="flex-1 p-4 space-y-2">
+            {/* Global Timer Indicator in Sidebar */}
+            {timer.isTracking && (
+              <div 
+                onClick={() => {
+                  navigateToTab('timetracker')
+                  setSidebarOpen(false)
+                }}
+                className="w-full flex items-center justify-between p-3 mb-4 bg-green-50 border border-green-200 rounded-lg cursor-pointer hover:bg-green-100 transition-colors"
+              >
+                <div className="flex items-center space-x-2">
+                  <Clock className="w-4 h-4 text-green-600" />
+                  <span className="text-sm text-green-700">Timer Running</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm font-mono text-green-700">
+                    {formatTimerTime(timer.currentTime)}
+                  </span>
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                </div>
+              </div>
+            )}
+            
             {navigationItems.map((item) => (
               <button
                 key={item.id}
@@ -135,6 +167,22 @@ const Dashboard = () => {
               </h1>
             </div>
             <div className="flex items-center space-x-4">
+              {/* Global Timer Indicator */}
+              {timer.isTracking && (
+                <div 
+                  onClick={() => navigateToTab('timetracker')}
+                  className="flex items-center space-x-2 bg-green-50 border border-green-200 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-green-100 transition-colors"
+                >
+                  <div className="flex items-center space-x-1">
+                    <Clock className="w-4 h-4 text-green-600" />
+                    <span className="text-sm font-mono text-green-700">
+                      {formatTimerTime(timer.currentTime)}
+                    </span>
+                  </div>
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                </div>
+              )}
+              
               <button className="p-2 rounded-lg hover:bg-gray-100">
                 <Search className="w-5 h-5 text-gray-500" />
               </button>
@@ -175,6 +223,7 @@ const Dashboard = () => {
             } />
             <Route path="/projects" element={<Projects />} />
             <Route path="/tasks" element={<Tasks />} />
+            <Route path="/taskboard" element={<TaskBoard />} />
             <Route path="/reports" element={
               <RoleBasedRoute page="reports">
                 <Reports />

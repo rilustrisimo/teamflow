@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { useAppContext } from '../context/AppContext'
-import { Plus, Calendar, Link, Video, User, MessageSquare, X, Play, Pause, Clock } from 'lucide-react'
+import { Plus, Calendar, Link, Video, User, MessageSquare, X, Play, Pause, Clock, Loader2 } from 'lucide-react'
 
 const ProjectBoard = () => {
   const { 
@@ -16,7 +16,8 @@ const ProjectBoard = () => {
     startTimer,
     stopTimer,
     currentUser,
-    teamMembers
+    teamMembers,
+    loading
   } = useAppContext()
 
   const [showNewTaskModal, setShowNewTaskModal] = useState(false)
@@ -63,12 +64,17 @@ const ProjectBoard = () => {
 
   // Filter projects and clients based on user role
   const getAvailableProjects = () => {
+    let filtered = []
     if (currentUser.role === 'client') {
       // Clients can only see projects they created
-      return projects.filter(project => project.created_by === currentUser.id)
+      filtered = projects.filter(project => project.created_by === currentUser.id)
+    } else {
+      // Admin, manager, team members can see all projects
+      filtered = projects
     }
-    // Admin, manager, team members can see all projects
-    return projects
+    
+    // Filter out archived projects
+    return filtered.filter(project => !project.archived)
   }
 
   const getAvailableClients = () => {
@@ -355,7 +361,7 @@ const ProjectBoard = () => {
         })}
       >
         <div className="flex items-start justify-between mb-3">
-          <h4 className="font-medium text-white text-sm">{task.title}</h4>
+          <h4 className="font-medium text-gray-800 text-sm">{task.title}</h4>
           <div className="flex items-center space-x-1">
             <div className={`w-2 h-2 rounded-full ${getPriorityColor(task.priority)}`}></div>
             <button
@@ -476,14 +482,14 @@ const ProjectBoard = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">Project Management Board</h2>
+          <h2 className="text-2xl font-bold text-gray-800">Project Management Board</h2>
           <p className="text-dark-500">Manage tasks and track project progress</p>
         </div>
         <div className="flex items-center space-x-4">
           <select
             value={selectedProject}
             onChange={(e) => setSelectedProject(e.target.value)}
-            className="bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+            className="bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
           >
             <option value="all">All Projects</option>
             {availableProjects.map(project => (
@@ -545,7 +551,7 @@ const ProjectBoard = () => {
           animate={{ opacity: 1, y: 0 }}
           className="bg-dark-200 rounded-xl p-6 border border-dark-300"
         >
-          <h3 className="text-lg font-semibold text-white mb-4">
+          <h3 className="text-lg font-semibold text-gray-800 mb-4">
             {currentUser.role === 'client' ? 'My Projects' : 'All Projects'} ({availableProjects.length})
           </h3>
           
@@ -576,7 +582,7 @@ const ProjectBoard = () => {
                   >
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex-1">
-                        <h4 className="font-medium text-white text-sm mb-1">{project.name}</h4>
+                        <h4 className="font-medium text-gray-800 text-sm mb-1">{project.name}</h4>
                         <p className="text-dark-500 text-xs">{client?.name || 'Unknown Client'}</p>
                       </div>
                       <span className={`px-2 py-1 rounded text-xs font-medium ${
@@ -635,7 +641,13 @@ const ProjectBoard = () => {
 
       {/* Kanban Board */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {columns.map((column) => (
+        {loading ? (
+          <div className="col-span-full flex flex-col items-center justify-center py-12 bg-dark-200 rounded-xl border border-dark-300">
+            <Loader2 className="w-8 h-8 animate-spin text-secondary mb-3" />
+            <span className="text-dark-500">Loading tasks...</span>
+          </div>
+        ) : (
+          columns.map((column) => (
           <div 
             key={column.id} 
             className="bg-dark-200 rounded-xl p-4 border border-dark-300 min-h-[500px]"
@@ -643,7 +655,7 @@ const ProjectBoard = () => {
             onDrop={(e) => handleDrop(e, column.id)}
           >
             <div className={`border-l-4 ${column.color} pl-3 mb-4`}>
-              <h3 className="font-semibold text-white">{column.title}</h3>
+              <h3 className="font-semibold text-gray-800">{column.title}</h3>
               <span className="text-sm text-dark-500">
                 {getTasksByStatus(column.id).length} tasks
               </span>
@@ -655,7 +667,8 @@ const ProjectBoard = () => {
               ))}
             </div>
           </div>
-        ))}
+          ))
+        )}
       </div>
 
       {/* New Task Modal */}
@@ -666,7 +679,7 @@ const ProjectBoard = () => {
             animate={{ opacity: 1, scale: 1 }}
             className="bg-dark-200 rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
           >
-            <h3 className="text-xl font-bold text-white mb-6">Create New Task</h3>
+            <h3 className="text-xl font-bold text-gray-800 mb-6">Create New Task</h3>
 
             <div className="space-y-4">
               <div>
@@ -675,7 +688,7 @@ const ProjectBoard = () => {
                   type="text"
                   value={newTask.title}
                   onChange={(e) => setNewTask({...newTask, title: e.target.value})}
-                  className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900 placeholder-gray-500"
                   placeholder="Enter task title"
                 />
               </div>
@@ -685,7 +698,7 @@ const ProjectBoard = () => {
                 <textarea
                   value={newTask.description}
                   onChange={(e) => setNewTask({...newTask, description: e.target.value})}
-                  className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900 placeholder-gray-500"
                   rows={3}
                   placeholder="Enter task description"
                 />
@@ -697,7 +710,7 @@ const ProjectBoard = () => {
                   <select
                     value={newTask.project_id}
                     onChange={(e) => setNewTask({...newTask, project_id: e.target.value})}
-                    className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                    className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
                   >
                     <option value="">Select project</option>
                     {availableProjects.map(project => (
@@ -712,7 +725,7 @@ const ProjectBoard = () => {
                   <label className="block text-sm font-medium text-dark-500 mb-2">Assigned To *</label>                    <select
                       value={newTask.assigned_to}
                       onChange={(e) => setNewTask({...newTask, assigned_to: e.target.value})}
-                      className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                      className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
                     >
                       <option value="">Select member</option>
                       {teamMembers
@@ -728,7 +741,7 @@ const ProjectBoard = () => {
                     type="date"
                     value={newTask.due_date}
                     onChange={(e) => setNewTask({...newTask, due_date: e.target.value})}
-                    className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                    className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
                   />
                 </div>
               </div>
@@ -738,7 +751,7 @@ const ProjectBoard = () => {
                 <select
                   value={newTask.priority}
                   onChange={(e) => setNewTask({...newTask, priority: e.target.value as 'low' | 'medium' | 'high'})}
-                  className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
                 >
                   <option value="low">Low</option>
                   <option value="medium">Medium</option>
@@ -754,7 +767,7 @@ const ProjectBoard = () => {
                     value={newTask.deliverable_link}
                     onChange={(e) => setNewTask({...newTask, deliverable_link: e.target.value})}
                     placeholder="https://..."
-                    className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                    className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900 placeholder-gray-500"
                   />
                 </div>
                 <div>
@@ -764,7 +777,7 @@ const ProjectBoard = () => {
                     value={newTask.video_link}
                     onChange={(e) => setNewTask({...newTask, video_link: e.target.value})}
                     placeholder="Loom/Video URL"
-                    className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                    className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900 placeholder-gray-500"
                   />
                 </div>
               </div>
@@ -776,7 +789,7 @@ const ProjectBoard = () => {
                   <input
                     type="text"
                     placeholder="Add initial checklist item..."
-                    className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white placeholder-dark-500"
+                    className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900 placeholder-gray-500"
                     onKeyPress={(e) => {
                       if (e.key === 'Enter' && e.currentTarget.value.trim()) {
                         // This would add to a temporary checklist state for new tasks
@@ -816,7 +829,7 @@ const ProjectBoard = () => {
             className="bg-dark-200 rounded-xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-white">{selectedTask.title}</h3>
+              <h3 className="text-xl font-bold text-gray-800">{selectedTask.title}</h3>
               <button
                 onClick={() => setSelectedTask(null)}
                 className="text-dark-500 hover:text-white"
@@ -832,7 +845,7 @@ const ProjectBoard = () => {
                   <textarea
                     value={selectedTask.description}
                     onChange={(e) => setSelectedTask({ ...selectedTask, description: e.target.value })}
-                    className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                    className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
                     rows={3}
                   />
                 </div>
@@ -843,7 +856,7 @@ const ProjectBoard = () => {
                     <select
                       value={selectedTask.project_id}
                       onChange={(e) => setSelectedTask({ ...selectedTask, project_id: e.target.value })}
-                      className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                      className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
                     >
                       {availableProjects.map(project => (
                         <option key={project.id} value={project.id}>{project.name}</option>
@@ -858,7 +871,7 @@ const ProjectBoard = () => {
                     <select
                       value={selectedTask.assigned_to}
                       onChange={(e) => setSelectedTask({ ...selectedTask, assigned_to: e.target.value })}
-                      className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                      className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
                     >
                       {teamMembers
                         .filter(member => member.role !== 'client')
@@ -873,7 +886,7 @@ const ProjectBoard = () => {
                       type="date"
                       value={selectedTask.due_date}
                       onChange={(e) => setSelectedTask({ ...selectedTask, due_date: e.target.value })}
-                      className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                      className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
                     />
                   </div>
                 </div>
@@ -884,7 +897,7 @@ const ProjectBoard = () => {
                     <select
                       value={selectedTask.status}
                       onChange={(e) => setSelectedTask({ ...selectedTask, status: e.target.value })}
-                      className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                      className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
                     >
                       <option value="todo">To Do</option>
                       <option value="inprogress">In Progress</option>
@@ -897,7 +910,7 @@ const ProjectBoard = () => {
                     <select
                       value={selectedTask.priority}
                       onChange={(e) => setSelectedTask({ ...selectedTask, priority: e.target.value })}
-                      className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                      className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
                     >
                       <option value="low">Low</option>
                       <option value="medium">Medium</option>
@@ -914,7 +927,7 @@ const ProjectBoard = () => {
                       value={selectedTask.deliverable_link}
                       onChange={(e) => setSelectedTask({ ...selectedTask, deliverable_link: e.target.value })}
                       placeholder="https://..."
-                      className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                      className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900 placeholder-gray-500"
                     />
                   </div>
                   <div>
@@ -924,7 +937,7 @@ const ProjectBoard = () => {
                       value={selectedTask.video_link}
                       onChange={(e) => setSelectedTask({ ...selectedTask, video_link: e.target.value })}
                       placeholder="Loom/Video URL"
-                      className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                      className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900 placeholder-gray-500"
                     />
                   </div>
                 </div>
@@ -961,7 +974,7 @@ const ProjectBoard = () => {
                       value={newChecklistItem}
                       onChange={(e) => setNewChecklistItem(e.target.value)}
                       placeholder="Add checklist item..."
-                      className="flex-1 bg-dark-300 border border-dark-400 rounded px-3 py-1 text-white text-sm"
+                      className="flex-1 bg-gray-100 border border-gray-300 rounded px-3 py-1 text-gray-900 text-sm placeholder-gray-500"
                       onKeyPress={(e) => e.key === 'Enter' && addChecklistItem()}
                     />
                     <button
@@ -993,7 +1006,7 @@ const ProjectBoard = () => {
                       value={newComment}
                       onChange={(e) => setNewComment(e.target.value)}
                       placeholder="Add a comment..."
-                      className="flex-1 bg-dark-300 border border-dark-400 rounded px-3 py-2 text-white text-sm"
+                      className="flex-1 bg-gray-100 border border-gray-300 rounded px-3 py-2 text-gray-900 text-sm placeholder-gray-500"
                       onKeyPress={(e) => e.key === 'Enter' && addComment()}
                     />
                     <button
@@ -1033,7 +1046,7 @@ const ProjectBoard = () => {
             animate={{ opacity: 1, scale: 1 }}
             className="bg-dark-200 rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
           >
-            <h3 className="text-xl font-bold text-white mb-6">Create New Project</h3>
+            <h3 className="text-xl font-bold text-gray-800 mb-6">Create New Project</h3>
 
             <div className="space-y-4">
               <div>
@@ -1042,7 +1055,7 @@ const ProjectBoard = () => {
                   type="text"
                   value={newProject.name}
                   onChange={(e) => setNewProject({...newProject, name: e.target.value})}
-                  className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900 placeholder-gray-500"
                   placeholder="Enter project name"
                 />
               </div>
@@ -1052,7 +1065,7 @@ const ProjectBoard = () => {
                 <textarea
                   value={newProject.description}
                   onChange={(e) => setNewProject({...newProject, description: e.target.value})}
-                  className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900 placeholder-gray-500"
                   rows={3}
                   placeholder="Enter project description"
                 />
@@ -1064,7 +1077,7 @@ const ProjectBoard = () => {
                   <select
                     value={newProject.client_id}
                     onChange={(e) => setNewProject({...newProject, client_id: e.target.value})}
-                    className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                    className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
                     disabled={currentUser.role === 'client'}
                   >
                     {currentUser.role === 'client' ? (
@@ -1088,7 +1101,7 @@ const ProjectBoard = () => {
                   <select
                     value={newProject.status}
                     onChange={(e) => setNewProject({...newProject, status: e.target.value as 'active' | 'completed' | 'on-hold' | 'cancelled'})}
-                    className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                    className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
                   >
                     <option value="active">Active</option>
                     <option value="on-hold">On Hold</option>
@@ -1105,7 +1118,7 @@ const ProjectBoard = () => {
                     type="date"
                     value={newProject.due_date}
                     onChange={(e) => setNewProject({...newProject, due_date: e.target.value})}
-                    className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                    className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
                   />
                 </div>
                 <div>
@@ -1114,7 +1127,7 @@ const ProjectBoard = () => {
                     type="number"
                     value={newProject.budget}
                     onChange={(e) => setNewProject({...newProject, budget: Number(e.target.value)})}
-                    className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                    className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900 placeholder-gray-500"
                     placeholder="0"
                     min="0"
                     step="0.01"

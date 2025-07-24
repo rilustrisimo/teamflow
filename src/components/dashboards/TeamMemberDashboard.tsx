@@ -23,11 +23,12 @@ const TeamMemberDashboard = () => {
     stopTimer
   } = useAppContext()
 
-  // Filter data for current user
+  // Filter data for current user (excluding archived)
   const myTimeEntries = timeEntries.filter(entry => entry.user_id === currentUser?.id)
-  const myTasks = tasks.filter(task => task.assigned_to === currentUser?.id)
+  const myTasks = tasks.filter(task => task.assigned_to === currentUser?.id && !task.archived)
   const myProjects = projects.filter(project => 
-    tasks.some(task => task.project_id === project.id && task.assigned_to === currentUser?.id)
+    !project.archived &&
+    tasks.some(task => task.project_id === project.id && task.assigned_to === currentUser?.id && !task.archived)
   )
 
   // Calculate personal stats

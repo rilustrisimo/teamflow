@@ -47,6 +47,7 @@ interface AppContextType {
   setTimer: (timer: Partial<TimerState>) => void
   startTimer: () => void
   stopTimer: () => void
+  resumeTimeEntry: (entry: any) => void
   
   // User context
   currentUser: Profile | null
@@ -70,6 +71,9 @@ interface AppContextType {
   addTask: (task: Omit<TaskInsert, 'created_by' | 'company_id'>) => Promise<void>
   updateTask: (id: string, updates: any) => Promise<void>
   deleteTask: (id: string) => Promise<void>
+  archiveTask: (id: string) => Promise<void>
+  unarchiveTask: (id: string) => Promise<void>
+  getArchivedTasks: () => Promise<any[]>
   
   addClient: (client: Omit<ClientInsert, 'created_by' | 'company_id'>) => Promise<void>
   updateClient: (id: string, updates: any) => Promise<void>
@@ -78,6 +82,9 @@ interface AppContextType {
   addProject: (project: Omit<ProjectInsert, 'created_by' | 'company_id'>) => Promise<void>
   updateProject: (id: string, updates: any) => Promise<void>
   deleteProject: (id: string) => Promise<void>
+  archiveProject: (id: string) => Promise<void>
+  unarchiveProject: (id: string) => Promise<void>
+  getArchivedProjects: () => Promise<any[]>
 
   // Team management
   inviteUser: (email: string, role: 'manager' | 'team-member' | 'client', fullName?: string) => Promise<void>
@@ -101,17 +108,44 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   
   // Loading state
   const [loading, setLoading] = useState(true)
+  // Load timer state from localStorage
+  const loadTimerFromStorage = (): TimerState => {
+    try {
+      const savedTimer = localStorage.getItem('teamflow-timer-state')
+      if (savedTimer) {
+        const parsed = JSON.parse(savedTimer)
+        // Convert startTime back to Date object if it exists
+        if (parsed.startTime) {
+          parsed.startTime = new Date(parsed.startTime)
+        }
+        return parsed
+      }
+    } catch (error) {
+      console.error('Error loading timer from localStorage:', error)
+    }
+    
+    return {
+      isTracking: false,
+      currentTime: 0,
+      selectedProject: '',
+      selectedClient: '',
+      selectedTask: '',
+      description: '',
+      startTime: null
+    }
+  }
+
+  // Save timer state to localStorage
+  const saveTimerToStorage = (timerState: TimerState) => {
+    try {
+      localStorage.setItem('teamflow-timer-state', JSON.stringify(timerState))
+    } catch (error) {
+      console.error('Error saving timer to localStorage:', error)
+    }
+  }
   
   // Timer state
-  const [timer, setTimerState] = useState<TimerState>({
-    isTracking: false,
-    currentTime: 0,
-    selectedProject: '',
-    selectedClient: '',
-    selectedTask: '',
-    description: '',
-    startTime: null
-  })
+  const [timer, setTimerState] = useState<TimerState>(loadTimerFromStorage)
 
   // Settings state
   const [settings, setSettings] = useState<Settings>({
@@ -146,6 +180,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } else {
       setCurrentUser(null)
       setLoading(false)
+      // Clear timer state when user logs out
+      const clearedTimer = {
+        isTracking: false,
+        currentTime: 0,
+        selectedProject: '',
+        selectedClient: '',
+        selectedTask: '',
+        description: '',
+        startTime: null
+      }
+      setTimerState(clearedTimer)
+      localStorage.removeItem('teamflow-timer-state')
     }
   }, [user])
 
@@ -154,22 +200,149 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (currentUser?.company_id && user?.id) {
       loadAllData()
       setupRealtimeSubscriptions()
+      // Check for pending timer saves
+      checkPendingTimerSave()
     }
   }, [currentUser, user])
 
-  // Timer effect
+  // Check for pending timer save from page unload
+  const checkPendingTimerSave = async () => {
+    try {
+      const pendingSave = localStorage.getItem('teamflow-pending-timer-save')
+      const wasManualStop = localStorage.getItem('teamflow-manual-stop') === 'true'
+      
+      if (pendingSave && currentUser && !wasManualStop) {
+        const timerEntry = JSON.parse(pendingSave)
+        
+        console.log('Found pending timer save, processing...', timerEntry)
+        
+        // Save the timer entry to database
+        await DatabaseService.createTimeEntry(timerEntry)
+        
+        // Remove the pending save
+        localStorage.removeItem('teamflow-pending-timer-save')
+        
+        // Refresh time entries to show the saved entry
+        const updatedEntries = currentUser.role === 'team-member' 
+          ? await DatabaseService.getTimeEntries(currentUser.id)
+          : await DatabaseService.getTimeEntries()
+        setTimeEntries(updatedEntries || [])
+        
+        console.log('Pending timer save processed successfully')
+        
+        // Show a notification that the timer was auto-saved
+        alert('Your previous timer session was automatically saved when the page was refreshed.')
+      } else if (pendingSave && wasManualStop) {
+        console.log('Found pending timer save but manual stop was in progress - clearing duplicate save')
+        localStorage.removeItem('teamflow-pending-timer-save')
+      } else if (!pendingSave) {
+        console.log('No pending timer save found')
+      }
+      
+      // Clean up manual stop flag
+      localStorage.removeItem('teamflow-manual-stop')
+      
+    } catch (error) {
+      console.error('Error processing pending timer save:', error)
+      // Keep the pending save for next attempt, but clear manual stop flag
+      localStorage.removeItem('teamflow-manual-stop')
+    }
+  }
+
+  // Timer effect - simple timer that increments every second when tracking
   useEffect(() => {
     let interval: NodeJS.Timeout
+    
     if (timer.isTracking) {
+      console.log('Timer started/resumed:', {
+        startTime: timer.startTime,
+        currentTime: timer.currentTime,
+        isTracking: timer.isTracking
+      })
+      
       interval = setInterval(() => {
-        setTimerState(prev => ({
-          ...prev,
-          currentTime: prev.currentTime + 1
-        }))
+        setTimerState(prev => {
+          const newState = { ...prev, currentTime: prev.currentTime + 1 }
+          saveTimerToStorage(newState)
+          return newState
+        })
       }, 1000)
     }
-    return () => clearInterval(interval)
+    
+    return () => {
+      if (interval) {
+        console.log('Timer interval cleared')
+        clearInterval(interval)
+      }
+    }
   }, [timer.isTracking])
+
+  // Add beforeunload event listener to auto-save timer data
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      // Only auto-save if timer is tracking AND we're not in the middle of a manual stop
+      const isManualStop = localStorage.getItem('teamflow-manual-stop') === 'true'
+      
+      if (timer.isTracking && timer.currentTime > 0 && timer.startTime && currentUser && !isManualStop) {
+        // Auto-save the current timer session synchronously
+        try {
+          const durationInMinutes = (Date.now() - timer.startTime.getTime()) / (1000 * 60) // Use precise calculation
+          const now = new Date()
+          
+          const newEntry = {
+            project_id: timer.selectedProject,
+            task_id: timer.selectedTask || null,
+            description: timer.description || 'Auto-saved timer session',
+            start_time: timer.startTime.toISOString(),
+            end_time: now.toISOString(),
+            duration: durationInMinutes,
+            date: timer.startTime.toISOString().split('T')[0], // Use start date for consistency
+            user_id: currentUser.id
+          }
+          
+          // Save to localStorage as backup
+          localStorage.setItem('teamflow-pending-timer-save', JSON.stringify(newEntry))
+          
+          // Clear timer state immediately
+          const clearedTimer = {
+            isTracking: false,
+            currentTime: 0,
+            selectedProject: '',
+            selectedClient: '',
+            selectedTask: '',
+            description: '',
+            startTime: null
+          }
+          localStorage.setItem('teamflow-timer-state', JSON.stringify(clearedTimer))
+          
+          console.log('Timer auto-saved on page unload (manual stop not in progress)')
+          
+        } catch (error) {
+          console.error('Error auto-saving timer:', error)
+        }
+      } else if (isManualStop) {
+        console.log('Skipping auto-save: manual stop in progress')
+      }
+    }
+
+    const handleVisibilityChange = () => {
+      // Also save when page becomes hidden (mobile browser switch, etc.)
+      // But only if we're not in the middle of a manual stop
+      const isManualStop = localStorage.getItem('teamflow-manual-stop') === 'true'
+      
+      if (document.hidden && timer.isTracking && timer.currentTime > 0 && timer.startTime && currentUser && !isManualStop) {
+        handleBeforeUnload()
+      }
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [timer.isTracking, timer.currentTime, timer.startTime, timer.selectedProject, timer.selectedClient, timer.selectedTask, timer.description, currentUser])
 
   const loadUserProfile = async () => {
     if (!user?.id) {
@@ -299,50 +472,97 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Timer actions
   const setTimer = (updates: Partial<TimerState>) => {
-    setTimerState(prev => ({ ...prev, ...updates }))
+    setTimerState(prev => {
+      const newState = { ...prev, ...updates }
+      saveTimerToStorage(newState)
+      return newState
+    })
   }
 
   const startTimer = () => {
-    if (!timer.selectedProject || !timer.selectedClient || !timer.selectedTask) {
-      alert('Please select client, project, and task before starting timer')
+    if (!timer.selectedProject || !timer.selectedClient) {
+      alert('Please select client and project before starting timer')
       return
     }
-    setTimerState(prev => ({
-      ...prev,
+    const newState = {
+      ...timer,
       isTracking: true,
       currentTime: 0,
       startTime: new Date()
-    }))
+    }
+    setTimerState(newState)
+    saveTimerToStorage(newState)
   }
 
   const stopTimer = async () => {
     if (!timer.startTime || !currentUser) return
     
-    const duration = timer.currentTime / 3600 // convert to hours
+    // Mark that we're manually stopping the timer to prevent auto-save duplicates
+    localStorage.setItem('teamflow-manual-stop', 'true')
+    
     const now = new Date()
     
-    // Find project and task IDs
-    const project = projects.find(p => p.name === timer.selectedProject)
-    const task = tasks.find(t => t.title === timer.selectedTask)
+    // Calculate precise duration from actual start/end times instead of timer.currentTime
+    const durationInMinutes = (now.getTime() - timer.startTime.getTime()) / (1000 * 60)
+    
+    // Determine the date - if timer crosses midnight, use start date
+    const entryDate = timer.startTime.toISOString().split('T')[0]
     
     const newEntry: Omit<TimeEntryInsert, 'user_id' | 'company_id'> = {
-      project_id: project?.id || null,
-      task_id: task?.id || null,
+      project_id: timer.selectedProject,
+      task_id: timer.selectedTask || null,
       description: timer.description || 'Timer session',
-      start_time: timer.startTime.toTimeString().slice(0, 5),
-      end_time: now.toTimeString().slice(0, 5),
-      duration: Math.round(duration * 100) / 100,
-      date: now.toISOString().split('T')[0]
+      start_time: timer.startTime.toISOString(),
+      end_time: now.toISOString(),
+      duration: durationInMinutes,
+      date: entryDate
     }
     
-    await addTimeEntry(newEntry)
-    setTimerState(prev => ({
-      ...prev,
+    try {
+      await addTimeEntry(newEntry)
+      
+      // Clear any pending auto-save since we successfully saved manually
+      localStorage.removeItem('teamflow-pending-timer-save')
+      
+      console.log('Timer manually stopped and saved successfully')
+    } catch (error) {
+      console.error('Error saving timer manually:', error)
+      // If manual save fails, keep the timer state so auto-save can handle it
+      localStorage.removeItem('teamflow-manual-stop')
+      throw error
+    }
+    
+    const newState = {
+      ...timer,
       isTracking: false,
       currentTime: 0,
       description: '',
       startTime: null
-    }))
+    }
+    setTimerState(newState)
+    saveTimerToStorage(newState)
+    
+    // Clear the manual stop flag after successful save and state reset
+    setTimeout(() => {
+      localStorage.removeItem('teamflow-manual-stop')
+    }, 1000)
+  }
+
+  const resumeTimeEntry = (entry: any) => {
+    // Get project details to set client
+    const project = projects.find(p => p.id === entry.project_id)
+    
+    const newState = {
+      isTracking: true,
+      currentTime: 0,
+      selectedProject: entry.project_id,
+      selectedClient: project?.client_id || '',
+      selectedTask: entry.task_id || '',
+      description: entry.description || '',
+      startTime: new Date()
+    }
+    setTimerState(newState)
+    saveTimerToStorage(newState)
   }
 
   // Settings actions
@@ -407,7 +627,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       const newTask = await DatabaseService.createTask({
         ...task,
-        created_by: currentUser.id
+        created_by: currentUser.user_id
       })
       setTasks(prev => [newTask, ...prev])
     } catch (error) {
@@ -434,6 +654,35 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setTasks(prev => prev.filter(task => task.id !== id))
     } catch (error) {
       console.error('Error deleting task:', error)
+      throw error
+    }
+  }
+
+  const archiveTask = async (id: string) => {
+    try {
+      await DatabaseService.archiveTask(id)
+      setTasks(prev => prev.filter(task => task.id !== id))
+    } catch (error) {
+      console.error('Error archiving task:', error)
+      throw error
+    }
+  }
+
+  const unarchiveTask = async (id: string) => {
+    try {
+      const unarchivedTask = await DatabaseService.unarchiveTask(id)
+      setTasks(prev => [unarchivedTask, ...prev])
+    } catch (error) {
+      console.error('Error unarchiving task:', error)
+      throw error
+    }
+  }
+
+  const getArchivedTasks = async () => {
+    try {
+      return await DatabaseService.getArchivedTasks()
+    } catch (error) {
+      console.error('Error getting archived tasks:', error)
       throw error
     }
   }
@@ -476,16 +725,32 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }
 
   const addProject = async (project: Omit<ProjectInsert, 'created_by' | 'company_id'>) => {
-    if (!currentUser) return
+    if (!currentUser) {
+      console.error('No current user available for project creation')
+      throw new Error('User not authenticated')
+    }
+    
+    console.log('Creating project with user:', { 
+      userId: currentUser.id, 
+      email: user?.email,
+      projectData: project 
+    })
     
     try {
       const newProject = await DatabaseService.createProject({
         ...project,
         created_by: currentUser.id
       })
+      console.log('Project created successfully:', newProject)
       setProjects(prev => [newProject, ...prev])
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error adding project:', error)
+      console.error('Error details:', {
+        message: error?.message,
+        code: error?.code,
+        details: error?.details,
+        hint: error?.hint
+      })
       throw error
     }
   }
@@ -496,6 +761,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setProjects(prev => prev.map(project => 
         project.id === id ? updatedProject : project
       ))
+      
+      // If the project was archived/unarchived, refresh tasks to reflect the trigger changes
+      if (updates.hasOwnProperty('archived')) {
+        console.log('Project archived status changed, refreshing tasks...')
+        try {
+          const updatedTasks = await DatabaseService.getTasks()
+          setTasks(updatedTasks)
+        } catch (error) {
+          console.warn('Failed to refresh tasks after project archive:', error)
+        }
+      }
     } catch (error) {
       console.error('Error updating project:', error)
       throw error
@@ -508,6 +784,55 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setProjects(prev => prev.filter(project => project.id !== id))
     } catch (error) {
       console.error('Error deleting project:', error)
+      throw error
+    }
+  }
+
+  const archiveProject = async (id: string) => {
+    try {
+      await DatabaseService.archiveProject(id)
+      // Remove the project from the active projects list
+      setProjects(prev => prev.filter(project => project.id !== id))
+      
+      // Refresh tasks to reflect the archived tasks from the database trigger
+      console.log('Project archived, refreshing tasks...')
+      try {
+        const updatedTasks = await DatabaseService.getTasks()
+        setTasks(updatedTasks)
+      } catch (error) {
+        console.warn('Failed to refresh tasks after project archive:', error)
+      }
+    } catch (error) {
+      console.error('Error archiving project:', error)
+      throw error
+    }
+  }
+
+  const unarchiveProject = async (id: string) => {
+    try {
+      const unArchivedProject = await DatabaseService.unarchiveProject(id)
+      // Add the project back to the active projects list
+      setProjects(prev => [unArchivedProject, ...prev])
+      
+      // Refresh tasks to reflect the unarchived tasks from the database trigger
+      console.log('Project unarchived, refreshing tasks...')
+      try {
+        const updatedTasks = await DatabaseService.getTasks()
+        setTasks(updatedTasks)
+      } catch (error) {
+        console.warn('Failed to refresh tasks after project unarchive:', error)
+      }
+    } catch (error) {
+      console.error('Error unarchiving project:', error)
+      throw error
+    }
+  }
+
+  const getArchivedProjects = async () => {
+    try {
+      return await DatabaseService.getArchivedProjects()
+    } catch (error) {
+      console.error('Error fetching archived projects:', error)
       throw error
     }
   }
@@ -541,6 +866,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setTimer,
     startTimer,
     stopTimer,
+    resumeTimeEntry,
     currentUser,
     settings,
     updateSettings,
@@ -555,12 +881,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     addTask,
     updateTask,
     deleteTask,
+    archiveTask,
+    unarchiveTask,
+    getArchivedTasks,
     addClient,
     updateClient,
     deleteClient,
     addProject,
     updateProject,
     deleteProject,
+    archiveProject,
+    unarchiveProject,
+    getArchivedProjects,
     inviteUser,
     refreshData
   }

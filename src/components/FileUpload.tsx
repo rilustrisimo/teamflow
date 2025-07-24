@@ -312,7 +312,7 @@ const FileUpload: React.FC<FileUploadProps> = ({
       {/* File List */}
       {showFileList && files.length > 0 && (
         <div className="bg-gray-800 rounded-lg p-4">
-          <h3 className="text-lg font-semibold text-white mb-4">
+          <h3 className="text-lg font-semibold text-gray-800 mb-4">
             Uploaded Files ({files.length})
           </h3>
           <div className="space-y-2">

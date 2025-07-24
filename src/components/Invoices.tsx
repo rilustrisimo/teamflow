@@ -153,7 +153,7 @@ const Invoices = () => {
       if (!groups[key]) {
         groups[key] = { description: key, hours: 0, entries: [] }
       }
-      groups[key].hours += entry.duration
+      groups[key].hours += entry.duration / 60 // Convert minutes to hours
       groups[key].entries.push(entry)
       return groups
     }, {} as Record<string, { description: string; hours: number; entries: any[] }>)
@@ -357,7 +357,7 @@ This invoice was generated automatically by TeamFlow.`
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">
+          <h2 className="text-2xl font-bold text-gray-800">
             {currentUser.role === 'client' ? 'My Invoices' : 'Invoices'}
           </h2>
           <p className="text-dark-500">
@@ -504,7 +504,7 @@ This invoice was generated automatically by TeamFlow.`
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="bg-dark-300 border border-dark-400 rounded px-3 py-1 text-white text-sm"
+            className="bg-gray-100 border border-gray-300 rounded px-3 py-1 text-gray-900 text-sm"
           >
             <option value="all">All Status</option>
             <option value="draft">Draft</option>
@@ -518,7 +518,7 @@ This invoice was generated automatically by TeamFlow.`
             <select
               value={clientFilter}
               onChange={(e) => setClientFilter(e.target.value)}
-              className="bg-dark-300 border border-dark-400 rounded px-3 py-1 text-white text-sm"
+              className="bg-gray-100 border border-gray-300 rounded px-3 py-1 text-gray-900 text-sm"
             >
               <option value="all">All Clients</option>
               {clients.map(client => (
@@ -533,7 +533,7 @@ This invoice was generated automatically by TeamFlow.`
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="bg-dark-300 border border-dark-400 rounded px-3 py-1 text-white text-sm"
+              className="bg-gray-100 border border-gray-300 rounded px-3 py-1 text-gray-900 text-sm"
               placeholder="Start Date"
             />
             <span className="text-dark-500">to</span>
@@ -541,7 +541,7 @@ This invoice was generated automatically by TeamFlow.`
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="bg-dark-300 border border-dark-400 rounded px-3 py-1 text-white text-sm"
+              className="bg-gray-100 border border-gray-300 rounded px-3 py-1 text-gray-900 text-sm"
               placeholder="End Date"
             />
           </div>
@@ -707,7 +707,7 @@ This invoice was generated automatically by TeamFlow.`
             animate={{ opacity: 1, scale: 1 }}
             className="bg-dark-200 rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
           >
-            <h3 className="text-xl font-bold text-white mb-6">Create New Invoice</h3>
+            <h3 className="text-xl font-bold text-gray-800 mb-6">Create New Invoice</h3>
 
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -716,7 +716,7 @@ This invoice was generated automatically by TeamFlow.`
                   <select
                     value={selectedClient}
                     onChange={(e) => setSelectedClient(e.target.value)}
-                    className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                    className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
                   >
                     <option value="">Select a client</option>
                     {clients.map(client => (
@@ -731,7 +731,7 @@ This invoice was generated automatically by TeamFlow.`
                     type="number"
                     value={hourlyRate}
                     onChange={(e) => setHourlyRate(Number(e.target.value))}
-                    className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                    className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
                   />
                 </div>
               </div>
@@ -745,7 +745,7 @@ This invoice was generated automatically by TeamFlow.`
                       type="date"
                       value={invoiceDateRange.start}
                       onChange={(e) => setInvoiceDateRange(prev => ({ ...prev, start: e.target.value }))}
-                      className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                      className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
                     />
                   </div>
                   <div>
@@ -754,7 +754,7 @@ This invoice was generated automatically by TeamFlow.`
                       type="date"
                       value={invoiceDateRange.end}
                       onChange={(e) => setInvoiceDateRange(prev => ({ ...prev, end: e.target.value }))}
-                      className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                      className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
                     />
                   </div>
                 </div>
@@ -762,7 +762,7 @@ This invoice was generated automatically by TeamFlow.`
 
               {selectedClient && invoiceDateRange.start && invoiceDateRange.end && (
                 <div className="bg-dark-300 rounded-lg p-4">
-                  <h4 className="font-medium text-white mb-3">Invoice Preview</h4>
+                  <h4 className="font-medium text-gray-700 mb-3">Invoice Preview</h4>
                   {invoicePreview.items.length > 0 ? (
                     <div className="space-y-3">
                       <div className="space-y-2">
@@ -813,7 +813,7 @@ This invoice was generated automatically by TeamFlow.`
             className="bg-dark-200 rounded-xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-white">Email Preview - Invoice {selectedInvoice.id}</h3>
+              <h3 className="text-xl font-bold text-gray-800">Email Preview - Invoice {selectedInvoice.id}</h3>
               <button
                 onClick={() => setShowEmailPreview(false)}
                 className="text-dark-500 hover:text-white"
@@ -836,7 +836,7 @@ This invoice was generated automatically by TeamFlow.`
                   type="text"
                   value={emailSubject}
                   onChange={(e) => setEmailSubject(e.target.value)}
-                  className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
                 />
               </div>
 
@@ -845,7 +845,7 @@ This invoice was generated automatically by TeamFlow.`
                 <textarea
                   value={emailBody}
                   onChange={(e) => setEmailBody(e.target.value)}
-                  className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
                   rows={15}
                 />
               </div>
@@ -889,7 +889,7 @@ This invoice was generated automatically by TeamFlow.`
             className="bg-dark-200 rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-white">Invoice {selectedInvoice.id}</h3>
+              <h3 className="text-xl font-bold text-gray-800">Invoice {selectedInvoice.id}</h3>
               <button
                 onClick={() => setSelectedInvoice(null)}
                 className="text-dark-500 hover:text-white"
@@ -901,11 +901,11 @@ This invoice was generated automatically by TeamFlow.`
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-6">
                 <div>
-                  <h4 className="font-medium text-white mb-2">Client</h4>
+                  <h4 className="font-medium text-gray-700 mb-2">Client</h4>
                   <p className="text-dark-500">{selectedInvoice.client}</p>
                 </div>
                 <div>
-                  <h4 className="font-medium text-white mb-2">Status</h4>
+                  <h4 className="font-medium text-gray-700 mb-2">Status</h4>
                   <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(selectedInvoice.status)}`}>
                     {selectedInvoice.status.charAt(0).toUpperCase() + selectedInvoice.status.slice(1)}
                   </span>
@@ -914,19 +914,19 @@ This invoice was generated automatically by TeamFlow.`
 
               <div className="grid grid-cols-2 gap-6">
                 <div>
-                  <h4 className="font-medium text-white mb-2">Invoice Period</h4>
+                  <h4 className="font-medium text-gray-700 mb-2">Invoice Period</h4>
                   <p className="text-dark-500">
                     {new Date(selectedInvoice.dateRange.start).toLocaleDateString()} - {new Date(selectedInvoice.dateRange.end).toLocaleDateString()}
                   </p>
                 </div>
                 <div>
-                  <h4 className="font-medium text-white mb-2">Due Date</h4>
+                  <h4 className="font-medium text-gray-700 mb-2">Due Date</h4>
                   <p className="text-dark-500">{new Date(selectedInvoice.dueDate).toLocaleDateString()}</p>
                 </div>
               </div>
 
               <div>
-                <h4 className="font-medium text-white mb-4">Invoice Items</h4>
+                <h4 className="font-medium text-gray-700 mb-4">Invoice Items</h4>
                 <div className="bg-dark-300 rounded-lg overflow-hidden">
                   <table className="w-full">
                     <thead className="bg-dark-400">

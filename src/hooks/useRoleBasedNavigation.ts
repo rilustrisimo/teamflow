@@ -13,7 +13,8 @@ import {
   Home,
   TrendingUp,
   Calendar,
-  Archive
+  Archive,
+  Kanban
 } from 'lucide-react'
 
 export interface NavigationItem {
@@ -77,7 +78,7 @@ export const useRoleBasedNavigation = () => {
   } else {
     items.push({
       id: 'projects',
-      label: 'My Projects',
+      label: 'Projects',
       icon: FileText,
       color: 'text-indigo-500',
       description: 'View your assigned projects'
@@ -92,6 +93,17 @@ export const useRoleBasedNavigation = () => {
       icon: Target,
       color: 'text-orange-500',
       description: 'Manage tasks and assignments'
+    })
+    
+    // Task Board - Kanban-style board for drag & drop
+    items.push({
+      id: 'taskboard',
+      label: 'Task Board',
+      icon: Kanban,
+      color: 'text-pink-500',
+      description: currentUser.role === 'admin' || currentUser.role === 'manager' 
+        ? 'Drag & drop task management for all team tasks'
+        : 'Drag & drop task management (your tasks only)'
     })
   }
   

@@ -31,7 +31,7 @@ const AdminDashboard = () => {
     },
     {
       label: 'Active Projects',
-      value: projects.filter(p => p.status === 'active').length.toString(),
+      value: projects.filter(p => p.status === 'active' && !p.archived).length.toString(),
       icon: FileText,
       color: 'text-green-500'
     },

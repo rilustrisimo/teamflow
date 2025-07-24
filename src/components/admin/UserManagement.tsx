@@ -273,7 +273,7 @@ const UserManagement = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">User Management</h2>
+          <h2 className="text-2xl font-bold text-gray-800">User Management</h2>
           <p className="text-gray-400">Manage user accounts and permissions</p>
         </div>
         <div className="flex space-x-3">
@@ -329,7 +329,7 @@ const UserManagement = () => {
               placeholder="Search users..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="bg-gray-700 border border-gray-600 rounded-lg pl-10 pr-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
+              className="bg-gray-100 border border-gray-300 rounded-lg pl-10 pr-4 py-2 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-blue-500"
             />
           </div>
           <div className="flex items-center space-x-2">
@@ -337,7 +337,7 @@ const UserManagement = () => {
             <select
               value={roleFilter}
               onChange={(e) => setRoleFilter(e.target.value)}
-              className="bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+              className="bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:border-blue-500"
             >
               <option value="all">All Roles</option>
               <option value="admin">Admin</option>
@@ -440,7 +440,7 @@ const UserManagement = () => {
             className="bg-gray-800 rounded-lg p-6 w-full max-w-md"
           >
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-white">Create New User</h3>
+              <h3 className="text-xl font-bold text-gray-800">Create New User</h3>
               <button
                 onClick={() => setShowCreateModal(false)}
                 className="text-gray-400 hover:text-white"
@@ -454,11 +454,11 @@ const UserManagement = () => {
                 <label className="block text-sm font-medium text-gray-300 mb-1">
                   Email *
                 </label>
-                <input
+                  <input
                   type="email"
                   value={newUser.email}
                   onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-blue-500"
                   placeholder="user@example.com"
                 />
               </div>
@@ -472,7 +472,7 @@ const UserManagement = () => {
                     type={showPassword ? 'text' : 'password'}
                     value={newUser.password}
                     onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 pr-10 text-white focus:outline-none focus:border-blue-500"
+                    className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 pr-10 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-blue-500"
                     placeholder="Minimum 6 characters"
                   />
                   <button
@@ -493,7 +493,7 @@ const UserManagement = () => {
                   type="text"
                   value={newUser.full_name}
                   onChange={(e) => setNewUser({ ...newUser, full_name: e.target.value })}
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-blue-500"
                   placeholder="John Doe"
                 />
               </div>
@@ -506,7 +506,7 @@ const UserManagement = () => {
                   type="text"
                   value={newUser.company_name}
                   onChange={(e) => setNewUser({ ...newUser, company_name: e.target.value })}
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-blue-500"
                   placeholder="Company Name"
                 />
               </div>
@@ -518,7 +518,7 @@ const UserManagement = () => {
                 <select
                   value={newUser.role}
                   onChange={(e) => setNewUser({ ...newUser, role: e.target.value as any })}
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:border-blue-500"
                 >
                   <option value="team-member">Team Member</option>
                   <option value="manager">Manager</option>
@@ -535,7 +535,7 @@ const UserManagement = () => {
                   type="number"
                   value={newUser.hourly_rate}
                   onChange={(e) => setNewUser({ ...newUser, hourly_rate: parseFloat(e.target.value) || 0 })}
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-blue-500"
                   placeholder="0"
                   min="0"
                   step="0.01"
@@ -571,7 +571,7 @@ const UserManagement = () => {
             className="bg-gray-800 rounded-lg p-6 w-full max-w-md"
           >
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-white">Invite User</h3>
+              <h3 className="text-xl font-bold text-gray-800">Invite User</h3>
               <button
                 onClick={() => setShowInviteModal(false)}
                 className="text-gray-400 hover:text-white"
@@ -589,7 +589,7 @@ const UserManagement = () => {
                   type="email"
                   value={inviteData.email}
                   onChange={(e) => setInviteData({ ...inviteData, email: e.target.value })}
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-blue-500"
                   placeholder="user@example.com"
                 />
               </div>
@@ -602,7 +602,7 @@ const UserManagement = () => {
                   type="text"
                   value={inviteData.full_name}
                   onChange={(e) => setInviteData({ ...inviteData, full_name: e.target.value })}
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-blue-500"
                   placeholder="John Doe"
                 />
               </div>
@@ -614,7 +614,7 @@ const UserManagement = () => {
                 <select
                   value={inviteData.role}
                   onChange={(e) => setInviteData({ ...inviteData, role: e.target.value as any })}
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:border-blue-500"
                 >
                   <option value="team-member">Team Member</option>
                   <option value="manager">Manager</option>
@@ -631,7 +631,7 @@ const UserManagement = () => {
                   type="number"
                   value={inviteData.hourly_rate}
                   onChange={(e) => setInviteData({ ...inviteData, hourly_rate: parseFloat(e.target.value) || 0 })}
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-blue-500"
                   placeholder="0"
                   min="0"
                   step="0.01"
@@ -667,7 +667,7 @@ const UserManagement = () => {
             className="bg-gray-800 rounded-lg p-6 w-full max-w-md"
           >
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-white">Edit User</h3>
+              <h3 className="text-xl font-bold text-gray-800">Edit User</h3>
               <button
                 onClick={() => setEditingUser(null)}
                 className="text-gray-400 hover:text-white"
@@ -697,7 +697,7 @@ const UserManagement = () => {
                   type="text"
                   value={editData.full_name}
                   onChange={(e) => setEditData({ ...editData, full_name: e.target.value })}
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-blue-500"
                   placeholder="John Doe"
                 />
               </div>
@@ -710,7 +710,7 @@ const UserManagement = () => {
                   type="text"
                   value={editData.company_name || ''}
                   onChange={(e) => setEditData({ ...editData, company_name: e.target.value })}
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-blue-500"
                   placeholder="Company Name"
                 />
               </div>
@@ -722,7 +722,7 @@ const UserManagement = () => {
                 <select
                   value={editData.role}
                   onChange={(e) => setEditData({ ...editData, role: e.target.value as any })}
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:border-blue-500"
                 >
                   <option value="team-member">Team Member</option>
                   <option value="manager">Manager</option>
@@ -739,7 +739,7 @@ const UserManagement = () => {
                   type="number"
                   value={editData.hourly_rate || 0}
                   onChange={(e) => setEditData({ ...editData, hourly_rate: parseFloat(e.target.value) || 0 })}
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-blue-500"
                   placeholder="0"
                   min="0"
                   step="0.01"

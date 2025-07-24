@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
 import { useAppContext } from '../context/AppContext'
-import { Plus, Mail, X, Users, Shield, UserCheck, Briefcase } from 'lucide-react'
+import { Plus, Mail, X, Users, Shield, UserCheck, Briefcase, Loader2 } from 'lucide-react'
 
 const TeamManagement = () => {
   const { currentUser, teamMembers, inviteUser, loading } = useAppContext()
@@ -19,7 +19,7 @@ const TeamManagement = () => {
     return (
       <div className="text-center py-8">
         <Shield className="w-12 h-12 text-dark-500 mx-auto mb-4" />
-        <h3 className="text-lg font-medium text-white mb-2">Access Restricted</h3>
+        <h3 className="text-lg font-medium text-gray-800 mb-2">Access Restricted</h3>
         <p className="text-dark-500">Only admins and managers can manage team members.</p>
       </div>
     )
@@ -43,7 +43,7 @@ const TeamManagement = () => {
     
     // Check if user already exists
     const existingUser = teamMembers.find(member => 
-      member.email?.toLowerCase() === inviteForm.email.toLowerCase()
+      member.user_id === inviteForm.email // Using user_id as a temporary check since email field doesn't exist
     )
     if (existingUser) {
       newErrors.email = 'User with this email already exists in your team'
@@ -118,7 +118,7 @@ const TeamManagement = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">Team Management</h2>
+          <h2 className="text-2xl font-bold text-gray-800">Team Management</h2>
           <p className="text-dark-500">Manage your team members and send invitations</p>
         </div>
         <button
@@ -141,7 +141,7 @@ const TeamManagement = () => {
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center space-x-2">
                   {getRoleIcon(role)}
-                  <h3 className="font-medium text-white">{roleLabel}s</h3>
+                  <h3 className="font-medium text-gray-800">{roleLabel}s</h3>
                 </div>
                 <span className="text-2xl font-bold text-primary">{members.length}</span>
               </div>
@@ -165,12 +165,17 @@ const TeamManagement = () => {
 
       {/* Team Members List */}
       <div className="bg-dark-200 rounded-xl p-6 border border-dark-300">
-        <h3 className="text-lg font-semibold text-white mb-4">All Team Members ({teamMembers.length})</h3>
+        <h3 className="text-lg font-semibold text-gray-800 mb-4">All Team Members ({teamMembers.length})</h3>
         
-        {teamMembers.length === 0 ? (
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-primary mb-3" />
+            <span className="text-dark-500">Loading team members...</span>
+          </div>
+        ) : teamMembers.length === 0 ? (
           <div className="text-center py-8">
             <Users className="w-12 h-12 text-dark-500 mx-auto mb-4" />
-            <h4 className="text-lg font-medium text-white mb-2">No team members yet</h4>
+            <h4 className="text-lg font-medium text-gray-800 mb-2">No team members yet</h4>
             <p className="text-dark-500 mb-4">Start building your team by inviting members</p>
             <button
               onClick={() => setShowInviteModal(true)}
@@ -200,8 +205,8 @@ const TeamManagement = () => {
                           {member.full_name.charAt(0).toUpperCase()}
                         </div>
                         <div>
-                          <p className="text-white font-medium">{member.full_name}</p>
-                          <p className="text-dark-500 text-sm">{member.email || 'No email'}</p>
+                          <p className="text-gray-900 font-medium">{member.full_name}</p>
+                          <p className="text-gray-500 text-sm">ID: {member.user_id}</p>
                         </div>
                       </div>
                     </td>
@@ -239,7 +244,7 @@ const TeamManagement = () => {
             className="bg-dark-200 rounded-xl p-6 max-w-md w-full"
           >
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-white">Invite Team Member</h3>
+              <h3 className="text-xl font-bold text-gray-800">Invite Team Member</h3>
               <button
                 onClick={() => setShowInviteModal(false)}
                 className="text-dark-500 hover:text-white"
@@ -258,7 +263,7 @@ const TeamManagement = () => {
                   name="email"
                   value={inviteForm.email}
                   onChange={handleInputChange}
-                  className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
                   placeholder="Enter email address"
                 />
                 {errors.email && (
@@ -274,7 +279,7 @@ const TeamManagement = () => {
                   name="role"
                   value={inviteForm.role}
                   onChange={handleInputChange}
-                  className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
                 >
                   <option value="team-member">Team Member</option>
                   <option value="manager">Manager</option>
@@ -291,7 +296,7 @@ const TeamManagement = () => {
                   value={inviteForm.message}
                   onChange={handleInputChange}
                   rows={3}
-                  className="w-full bg-dark-300 border border-dark-400 rounded-lg px-4 py-2 text-white"
+                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
                   placeholder="Add a personal message to the invitation..."
                 />
               </div>
