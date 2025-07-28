@@ -200,54 +200,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (currentUser?.company_id && user?.id) {
       loadAllData()
       setupRealtimeSubscriptions()
-      // Check for pending timer saves
-      checkPendingTimerSave()
     }
   }, [currentUser, user])
-
-  // Check for pending timer save from page unload
-  const checkPendingTimerSave = async () => {
-    try {
-      const pendingSave = localStorage.getItem('teamflow-pending-timer-save')
-      const wasManualStop = localStorage.getItem('teamflow-manual-stop') === 'true'
-      
-      if (pendingSave && currentUser && !wasManualStop) {
-        const timerEntry = JSON.parse(pendingSave)
-        
-        console.log('Found pending timer save, processing...', timerEntry)
-        
-        // Save the timer entry to database
-        await DatabaseService.createTimeEntry(timerEntry)
-        
-        // Remove the pending save
-        localStorage.removeItem('teamflow-pending-timer-save')
-        
-        // Refresh time entries to show the saved entry
-        const updatedEntries = currentUser.role === 'team-member' 
-          ? await DatabaseService.getTimeEntries(currentUser.id)
-          : await DatabaseService.getTimeEntries()
-        setTimeEntries(updatedEntries || [])
-        
-        console.log('Pending timer save processed successfully')
-        
-        // Show a notification that the timer was auto-saved
-        alert('Your previous timer session was automatically saved when the page was refreshed.')
-      } else if (pendingSave && wasManualStop) {
-        console.log('Found pending timer save but manual stop was in progress - clearing duplicate save')
-        localStorage.removeItem('teamflow-pending-timer-save')
-      } else if (!pendingSave) {
-        console.log('No pending timer save found')
-      }
-      
-      // Clean up manual stop flag
-      localStorage.removeItem('teamflow-manual-stop')
-      
-    } catch (error) {
-      console.error('Error processing pending timer save:', error)
-      // Keep the pending save for next attempt, but clear manual stop flag
-      localStorage.removeItem('teamflow-manual-stop')
-    }
-  }
 
   // Timer effect - simple timer that increments every second when tracking
   useEffect(() => {
@@ -260,6 +214,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         isTracking: timer.isTracking
       })
       
+      // Main timer interval
       interval = setInterval(() => {
         setTimerState(prev => {
           const newState = { ...prev, currentTime: prev.currentTime + 1 }
@@ -275,74 +230,29 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         clearInterval(interval)
       }
     }
-  }, [timer.isTracking])
+  }, [timer.isTracking, timer.startTime])
 
-  // Add beforeunload event listener to auto-save timer data
+  // Simple warning effect - warn user when leaving page with active timer
   useEffect(() => {
-    const handleBeforeUnload = () => {
-      // Only auto-save if timer is tracking AND we're not in the middle of a manual stop
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      // Only show warning if timer is tracking AND we're not in the middle of a manual stop
       const isManualStop = localStorage.getItem('teamflow-manual-stop') === 'true'
       
-      if (timer.isTracking && timer.currentTime > 0 && timer.startTime && currentUser && !isManualStop) {
-        // Auto-save the current timer session synchronously
-        try {
-          const durationInMinutes = (Date.now() - timer.startTime.getTime()) / (1000 * 60) // Use precise calculation
-          const now = new Date()
-          
-          const newEntry = {
-            project_id: timer.selectedProject,
-            task_id: timer.selectedTask || null,
-            description: timer.description || 'Auto-saved timer session',
-            start_time: timer.startTime.toISOString(),
-            end_time: now.toISOString(),
-            duration: durationInMinutes,
-            date: timer.startTime.toISOString().split('T')[0], // Use start date for consistency
-            user_id: currentUser.id
-          }
-          
-          // Save to localStorage as backup
-          localStorage.setItem('teamflow-pending-timer-save', JSON.stringify(newEntry))
-          
-          // Clear timer state immediately
-          const clearedTimer = {
-            isTracking: false,
-            currentTime: 0,
-            selectedProject: '',
-            selectedClient: '',
-            selectedTask: '',
-            description: '',
-            startTime: null
-          }
-          localStorage.setItem('teamflow-timer-state', JSON.stringify(clearedTimer))
-          
-          console.log('Timer auto-saved on page unload (manual stop not in progress)')
-          
-        } catch (error) {
-          console.error('Error auto-saving timer:', error)
-        }
-      } else if (isManualStop) {
-        console.log('Skipping auto-save: manual stop in progress')
+      if (timer.isTracking && timer.currentTime > 0 && !isManualStop) {
+        // Show warning to user
+        event.preventDefault()
+        event.returnValue = 'You have an active timer running. Leaving this page will not save your time.'
+        return 'You have an active timer running. Leaving this page will not save your time.'
       }
     }
 
-    const handleVisibilityChange = () => {
-      // Also save when page becomes hidden (mobile browser switch, etc.)
-      // But only if we're not in the middle of a manual stop
-      const isManualStop = localStorage.getItem('teamflow-manual-stop') === 'true'
-      
-      if (document.hidden && timer.isTracking && timer.currentTime > 0 && timer.startTime && currentUser && !isManualStop) {
-        handleBeforeUnload()
-      }
-    }
-
+    // Add event listener
     window.addEventListener('beforeunload', handleBeforeUnload)
-    document.addEventListener('visibilitychange', handleVisibilityChange)
     
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload)
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [timer.isTracking, timer.currentTime, timer.startTime, timer.selectedProject, timer.selectedClient, timer.selectedTask, timer.description, currentUser])
+  }, [timer.isTracking, timer.currentTime])
 
   const loadUserProfile = async () => {
     if (!user?.id) {
@@ -420,8 +330,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           return []
         }),
         (currentUser.role === 'team-member' 
-          ? DatabaseService.getTimeEntries(currentUser.id)
-          : DatabaseService.getTimeEntries()
+          ? DatabaseService.getTimeEntriesWithUserRates(currentUser.id)
+          : DatabaseService.getTimeEntriesWithUserRates()
         ).catch(err => {
           console.warn('Failed to load time entries:', err)
           return []
@@ -484,12 +394,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       alert('Please select client and project before starting timer')
       return
     }
+    const startTime = new Date()
     const newState = {
       ...timer,
       isTracking: true,
       currentTime: 0,
-      startTime: new Date()
+      startTime
     }
+    console.log('Starting new timer session:', {
+      startTime: startTime.toISOString(),
+      project: timer.selectedProject,
+      client: timer.selectedClient,
+      task: timer.selectedTask
+    })
     setTimerState(newState)
     saveTimerToStorage(newState)
   }
@@ -508,18 +425,39 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     // Determine the date - if timer crosses midnight, use start date
     const entryDate = timer.startTime.toISOString().split('T')[0]
     
-    const newEntry: Omit<TimeEntryInsert, 'user_id' | 'company_id'> = {
-      project_id: timer.selectedProject,
-      task_id: timer.selectedTask || null,
-      description: timer.description || 'Timer session',
-      start_time: timer.startTime.toISOString(),
-      end_time: now.toISOString(),
-      duration: durationInMinutes,
-      date: entryDate
-    }
-    
     try {
-      await addTimeEntry(newEntry)
+      // Check if there's already an entry with the same start time (to prevent duplicates)
+      const existingEntry = await DatabaseService.findTimeEntryByStartTime(
+        timer.startTime.toISOString(), 
+        currentUser.id
+      )
+      
+      if (existingEntry) {
+        console.log('Found existing entry with same start time, updating instead of creating new:', existingEntry.id)
+        
+        // Update the existing entry
+        await DatabaseService.updateTimeEntry(existingEntry.id, {
+          end_time: now.toISOString(),
+          duration: durationInMinutes,
+          description: timer.description || existingEntry.description
+        })
+        
+        console.log('Updated existing timer entry successfully')
+      } else {
+        // Create new entry
+        const newEntry: Omit<TimeEntryInsert, 'user_id' | 'company_id'> = {
+          project_id: timer.selectedProject,
+          task_id: timer.selectedTask || null,
+          description: timer.description || 'Timer session',
+          start_time: timer.startTime.toISOString(),
+          end_time: now.toISOString(),
+          duration: durationInMinutes,
+          date: entryDate
+        }
+        
+        await addTimeEntry(newEntry)
+        console.log('Created new timer entry successfully')
+      }
       
       // Clear any pending auto-save since we successfully saved manually
       localStorage.removeItem('teamflow-pending-timer-save')
@@ -588,11 +526,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!currentUser) return
     
     try {
-      const newEntry = await DatabaseService.createTimeEntry({
+      await DatabaseService.createTimeEntry({
         ...entry,
         user_id: currentUser.id
       })
-      setTimeEntries(prev => [newEntry, ...prev])
+      // Refresh time entries with user rates
+      const timeEntriesData = currentUser.role === 'team-member' 
+        ? await DatabaseService.getTimeEntriesWithUserRates(currentUser.id)
+        : await DatabaseService.getTimeEntriesWithUserRates(currentUser.id) // Always filter by current user in Time Tracker
+      setTimeEntries(timeEntriesData || [])
     } catch (error) {
       console.error('Error adding time entry:', error)
       throw error
@@ -601,10 +543,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const updateTimeEntry = async (id: string, updates: any) => {
     try {
-      const updatedEntry = await DatabaseService.updateTimeEntry(id, updates)
-      setTimeEntries(prev => prev.map(entry => 
-        entry.id === id ? updatedEntry : entry
-      ))
+      await DatabaseService.updateTimeEntry(id, updates)
+      // Refresh time entries with user rates
+      const timeEntriesData = currentUser?.role === 'team-member' 
+        ? await DatabaseService.getTimeEntriesWithUserRates(currentUser.id)
+        : await DatabaseService.getTimeEntriesWithUserRates()
+      setTimeEntries(timeEntriesData || [])
     } catch (error) {
       console.error('Error updating time entry:', error)
       throw error
@@ -614,7 +558,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const deleteTimeEntry = async (id: string) => {
     try {
       await DatabaseService.deleteTimeEntry(id)
-      setTimeEntries(prev => prev.filter(entry => entry.id !== id))
+      // Refresh time entries with user rates
+      const timeEntriesData = currentUser?.role === 'team-member' 
+        ? await DatabaseService.getTimeEntriesWithUserRates(currentUser.id)
+        : await DatabaseService.getTimeEntriesWithUserRates()
+      setTimeEntries(timeEntriesData || [])
     } catch (error) {
       console.error('Error deleting time entry:', error)
       throw error

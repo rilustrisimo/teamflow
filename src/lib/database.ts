@@ -696,6 +696,42 @@ export class DatabaseService {
     return data
   }
 
+  // Get time entries with user profile data for revenue calculations
+  static async getTimeEntriesWithUserRates(userId?: string) {
+    // Get current user's company_id first
+    const { data: currentProfile } = await supabase
+      .from('profiles')
+      .select('company_id')
+      .eq('user_id', await getCurrentUserId())
+      .single()
+    
+    if (!currentProfile?.company_id) {
+      throw new Error('User not associated with a company')
+    }
+
+    let query = supabase
+      .from('time_entries')
+      .select(`
+        *,
+        user_profile:profiles!time_entries_user_id_fkey(
+          full_name,
+          hourly_rate
+        )
+      `)
+      .eq('company_id', currentProfile.company_id)
+      .order('date', { ascending: false })
+      .order('start_time', { ascending: false })
+    
+    if (userId) {
+      query = query.eq('user_id', userId)
+    }
+    
+    const { data, error } = await query
+    
+    if (error) throw error
+    return data
+  }
+
   static async createTimeEntry(timeEntry: Omit<TimeEntryInsert, 'company_id'>) {
     // Get current user's company_id
     const { data: currentProfile } = await supabase
@@ -737,6 +773,42 @@ export class DatabaseService {
       .eq('id', id)
     
     if (error) throw error
+  }
+
+  // Find time entry by start time and user (for duplicate checking)
+  static async findTimeEntryByStartTime(startTime: string, userId: string) {
+    // Get current user's company_id
+    const { data: currentProfile } = await supabase
+      .from('profiles')
+      .select('company_id')
+      .eq('user_id', await getCurrentUserId())
+      .single()
+    
+    if (!currentProfile?.company_id) {
+      throw new Error('User not associated with a company')
+    }
+
+    // Convert start time to timestamp for comparison
+    const startDate = new Date(startTime)
+    const toleranceMs = 1000 // 1 second tolerance
+    const startWindow = new Date(startDate.getTime() - toleranceMs).toISOString()
+    const endWindow = new Date(startDate.getTime() + toleranceMs).toISOString()
+
+    const { data, error } = await supabase
+      .from('time_entries')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('company_id', currentProfile.company_id)
+      .gte('start_time', startWindow)
+      .lte('start_time', endWindow)
+      .limit(1)
+      .single()
+    
+    if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+      throw error
+    }
+    
+    return data
   }
 
   // Invoice operations

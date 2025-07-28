@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { useAppContext } from '../context/AppContext'
 import { EmailService } from '../lib/emailService'
@@ -6,28 +6,56 @@ import { Plus, Send, Eye, Download, DollarSign, Calendar, User, FileText, Mail, 
 
 interface Invoice {
   id: string
-  client: string
+  client_id: string
+  client_name: string
   amount: number
   hours: number
-  rate: number
   status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled'
-  dueDate: string
-  createdDate: string
-  items: { description: string; hours: number; rate: number }[]
-  clientEmail: string
+  due_date: string
+  created_date: string
+  items: InvoiceItem[]
+  client_email: string
   balance: number
-  dateRange: { start: string; end: string }
+  date_range: { start: string; end: string }
+  notes?: string
+}
+
+interface InvoiceItem {
+  id?: string
+  description: string
+  hours: number
+  rate: number
+  amount: number
+  type: 'time_entry' | 'additional'
+  time_entry_ids?: string[]
 }
 
 const Invoices = () => {
-  const { clients, timeEntries, currentUser } = useAppContext()
+  const { clients, timeEntries, projects, currentUser } = useAppContext()
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [selectedClient, setSelectedClient] = useState('')
-  const [hourlyRate, setHourlyRate] = useState(80)
+  
+  // Helper function to get current month's start and end dates
+  const getCurrentMonthDates = () => {
+    const now = new Date()
+    const year = now.getFullYear()
+    const month = now.getMonth()
+    
+    const startOfMonth = new Date(year, month, 1)
+    const endOfMonth = new Date(year, month + 1, 0)
+    
+    return {
+      start: startOfMonth.toISOString().split('T')[0],
+      end: endOfMonth.toISOString().split('T')[0]
+    }
+  }
+
+  const currentMonth = getCurrentMonthDates()
   const [invoiceDateRange, setInvoiceDateRange] = useState({
-    start: '',
-    end: ''
+    start: currentMonth.start,
+    end: currentMonth.end
   })
+  const [additionalItems, setAdditionalItems] = useState<InvoiceItem[]>([])
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
   const [showEmailPreview, setShowEmailPreview] = useState(false)
   const [emailSubject, setEmailSubject] = useState('')
@@ -46,71 +74,22 @@ const Invoices = () => {
     return <div>Loading...</div>
   }
 
-  const clientEmails = {
-    'TechCorp': 'contact@techcorp.com',
-    'StartupXYZ': 'billing@startupxyz.com',
-    'Creative Co': 'admin@creativeco.com',
-    'E-commerce Plus': 'finance@ecommerceplus.com'
-  }
+  // Initialize invoices from localStorage or empty array
+  const [invoices, setInvoices] = useState<Invoice[]>(() => {
+    const saved = localStorage.getItem('invoices')
+    return saved ? JSON.parse(saved) : []
+  })
 
-  const [invoices, setInvoices] = useState<Invoice[]>([
-    {
-      id: 'INV-001',
-      client: 'TechCorp',
-      amount: 3256,
-      hours: 40.7,
-      rate: 80,
-      status: 'sent',
-      dueDate: '2024-02-15',
-      createdDate: '2024-01-15',
-      clientEmail: 'contact@techcorp.com',
-      balance: 3256,
-      dateRange: { start: '2024-01-01', end: '2024-01-15' },
-      items: [
-        { description: 'Website Redesign', hours: 24.5, rate: 80 },
-        { description: 'API Integration', hours: 16.2, rate: 80 }
-      ]
-    },
-    {
-      id: 'INV-002',
-      client: 'StartupXYZ',
-      amount: 4104,
-      hours: 51.3,
-      rate: 80,
-      status: 'paid',
-      dueDate: '2024-02-10',
-      createdDate: '2024-01-10',
-      clientEmail: 'billing@startupxyz.com',
-      balance: 0,
-      dateRange: { start: '2024-01-01', end: '2024-01-10' },
-      items: [
-        { description: 'Mobile App Development', hours: 32.8, rate: 80 },
-        { description: 'Backend Setup', hours: 18.5, rate: 80 }
-      ]
-    },
-    {
-      id: 'INV-003',
-      client: 'Creative Co',
-      amount: 2264,
-      hours: 28.3,
-      rate: 80,
-      status: 'overdue',
-      dueDate: '2024-01-30',
-      createdDate: '2024-01-01',
-      clientEmail: 'admin@creativeco.com',
-      balance: 2264,
-      dateRange: { start: '2023-12-01', end: '2024-01-01' },
-      items: [
-        { description: 'Brand Identity Design', hours: 28.3, rate: 80 }
-      ]
-    }
-  ])
+  // Save invoices to localStorage whenever invoices change
+  useEffect(() => {
+    localStorage.setItem('invoices', JSON.stringify(invoices))
+  }, [invoices])
 
   // Filter invoices based on user role
   const getFilteredInvoices = () => {
     if (!currentUser) return invoices
     if (currentUser.role === 'client') {
-      return invoices.filter(invoice => invoice.client === currentUser.company_name)
+      return invoices.filter(invoice => invoice.client_name === currentUser.company_name)
     }
     return invoices
   }
@@ -132,12 +111,20 @@ const Invoices = () => {
       return []
     }
 
+    // Find the selected client object
+    const client = clients.find(c => c.name === selectedClient)
+    if (!client) return []
+
+    // Find all projects for this client
+    const clientProjects = projects.filter(p => p.client_id === client.id)
+    const projectIds = clientProjects.map(p => p.id)
+
     return timeEntries.filter(entry => {
       const entryDate = new Date(entry.date)
       const startDate = new Date(invoiceDateRange.start)
       const endDate = new Date(invoiceDateRange.end)
       
-      return entry.client === selectedClient && 
+      return projectIds.includes(entry.project_id || '') && 
              entryDate >= startDate && 
              entryDate <= endDate
     })
@@ -147,27 +134,48 @@ const Invoices = () => {
   const getInvoicePreview = () => {
     const entries = getTimeEntriesForInvoice()
     
-    // Group entries by project/task
+    // Group entries by project/task and user
     const groupedEntries = entries.reduce((groups, entry) => {
-      const key = entry.task || entry.project || 'General Work'
+      // Find project and task names
+      const project = projects.find(p => p.id === entry.project_id)
+      const task = entry.task_id ? projects.flatMap(p => p.tasks || []).find(t => t.id === entry.task_id) : null
+      
+      const projectTaskKey = task ? `${project?.name || 'Unknown Project'} - ${task.title}` : project?.name || 'General Work'
+      const userRate = entry.user_profile?.hourly_rate || currentUser?.hourly_rate || 0
+      const userName = entry.user_profile?.full_name || 'Unknown User'
+      
+      // Create unique key for project/task + user + rate combination
+      const key = `${projectTaskKey} (${userName} @ $${userRate}/h)`
+      
       if (!groups[key]) {
-        groups[key] = { description: key, hours: 0, entries: [] }
+        groups[key] = { 
+          description: projectTaskKey,
+          userName,
+          hours: 0, 
+          rate: userRate,
+          entries: [] 
+        }
       }
       groups[key].hours += entry.duration / 60 // Convert minutes to hours
       groups[key].entries.push(entry)
       return groups
-    }, {} as Record<string, { description: string; hours: number; entries: any[] }>)
+    }, {} as Record<string, { description: string; userName: string; hours: number; rate: number; entries: any[] }>)
 
-    const items = Object.values(groupedEntries).map((group: any) => ({
-      description: group.description,
+    const timeBasedItems: InvoiceItem[] = Object.values(groupedEntries).map((group: any) => ({
+      description: `${group.description} (${group.userName})`,
       hours: Math.round(group.hours * 100) / 100,
-      rate: hourlyRate
+      rate: group.rate,
+      amount: Math.round(group.hours * group.rate * 100) / 100,
+      type: 'time_entry' as const,
+      time_entry_ids: group.entries.map((entry: any) => entry.id)
     }))
 
-    const totalHours = items.reduce((sum, item) => sum + item.hours, 0)
-    const totalAmount = totalHours * hourlyRate
+    // Combine with additional items
+    const allItems = [...timeBasedItems, ...additionalItems]
+    const totalHours = timeBasedItems.reduce((sum, item) => sum + item.hours, 0)
+    const totalAmount = allItems.reduce((sum, item) => sum + item.amount, 0)
 
-    return { items, totalHours, totalAmount }
+    return { items: allItems, totalHours, totalAmount }
   }
 
   const applyFilters = () => {
@@ -182,6 +190,16 @@ const Invoices = () => {
     setShowFiltered(false)
   }
 
+  const resetInvoiceForm = () => {
+    setSelectedClient('')
+    const currentMonth = getCurrentMonthDates()
+    setInvoiceDateRange({
+      start: currentMonth.start,
+      end: currentMonth.end
+    })
+    setAdditionalItems([])
+  }
+
   const generateInvoice = () => {
     if (!selectedClient || !invoiceDateRange.start || !invoiceDateRange.end) {
       alert('Please select client and date range')
@@ -192,29 +210,35 @@ const Invoices = () => {
       const { items, totalHours, totalAmount } = getInvoicePreview()
       
       if (items.length === 0) {
-        alert('No time entries found for the selected client and date range')
+        alert('No time entries or additional items found for the selected client and date range')
+        return
+      }
+
+      // Find client data
+      const client = clients.find(c => c.name === selectedClient)
+      if (!client) {
+        alert('Client not found')
         return
       }
 
       const newInvoice: Invoice = {
         id: `INV-${String(invoices.length + 1).padStart(3, '0')}`,
-        client: selectedClient,
+        client_id: client.id,
+        client_name: selectedClient,
         amount: Math.round(totalAmount * 100) / 100,
         hours: Math.round(totalHours * 100) / 100,
-        rate: hourlyRate,
         status: 'draft',
-        dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        createdDate: new Date().toISOString().split('T')[0],
-        clientEmail: clientEmails[selectedClient as keyof typeof clientEmails] || '',
+        due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        created_date: new Date().toISOString().split('T')[0],
+        client_email: client.email || '',
         balance: Math.round(totalAmount * 100) / 100,
-        dateRange: { start: invoiceDateRange.start, end: invoiceDateRange.end },
+        date_range: { start: invoiceDateRange.start, end: invoiceDateRange.end },
         items
       }
 
       setInvoices(prev => [...prev, newInvoice])
       setShowCreateModal(false)
-      setSelectedClient('')
-      setInvoiceDateRange({ start: '', end: '' })
+      resetInvoiceForm()
       alert(`Invoice ${newInvoice.id} created successfully!`)
     } catch (error) {
       console.error('Error creating invoice:', error)
@@ -224,19 +248,19 @@ const Invoices = () => {
 
   const prepareEmailPreview = (invoice: Invoice) => {
     const subject = `Invoice ${invoice.id} from TeamFlow - $${invoice.amount.toLocaleString()}`
-    const body = `Dear ${invoice.client} Team,
+    const body = `Dear ${invoice.client_name} Team,
 
 I hope this email finds you well. Please find attached invoice ${invoice.id} for the services provided.
 
 Invoice Details:
 - Invoice Number: ${invoice.id}
 - Amount: $${invoice.amount.toLocaleString()}
-- Due Date: ${new Date(invoice.dueDate).toLocaleDateString()}
+- Due Date: ${new Date(invoice.due_date).toLocaleDateString()}
 - Total Hours: ${invoice.hours}h
-- Period: ${new Date(invoice.dateRange.start).toLocaleDateString()} - ${new Date(invoice.dateRange.end).toLocaleDateString()}
+- Period: ${new Date(invoice.date_range.start).toLocaleDateString()} - ${new Date(invoice.date_range.end).toLocaleDateString()}
 
 Services Provided:
-${invoice.items.map(item => `• ${item.description}: ${item.hours}h @ $${item.rate}/h = $${(item.hours * item.rate).toLocaleString()}`).join('\n')}
+${invoice.items.map(item => `• ${item.description}: ${item.hours}h @ $${item.rate}/h = $${item.amount.toLocaleString()}`).join('\n')}
 
 Payment Terms: Net 30 days
 Payment can be made via bank transfer or check. Please reference invoice number ${invoice.id} with your payment.
@@ -267,20 +291,20 @@ This invoice was generated automatically by TeamFlow.`
       
       // Prepare invoice data for email
       const invoiceData = {
-        clientEmail: selectedInvoice.clientEmail,
-        clientName: selectedInvoice.client,
+        clientEmail: selectedInvoice.client_email,
+        clientName: selectedInvoice.client_name,
         invoiceNumber: selectedInvoice.id,
         amount: selectedInvoice.amount,
-        dueDate: selectedInvoice.dueDate,
+        dueDate: selectedInvoice.due_date,
         items: selectedInvoice.items.map(item => ({
           description: item.description,
           hours: item.hours,
           rate: item.rate,
-          total: item.hours * item.rate
+          total: item.amount
         })),
         dateRange: {
-          start: selectedInvoice.dateRange.start,
-          end: selectedInvoice.dateRange.end
+          start: selectedInvoice.date_range.start,
+          end: selectedInvoice.date_range.end
         }
       }
 
@@ -337,11 +361,11 @@ This invoice was generated automatically by TeamFlow.`
   const baseInvoices = getFilteredInvoices()
   const filteredInvoices = baseInvoices.filter(invoice => {
     if (statusFilter !== 'all' && invoice.status !== statusFilter) return false
-    if (currentUser.role !== 'client' && clientFilter !== 'all' && invoice.client !== clientFilter) return false
+    if (currentUser.role !== 'client' && clientFilter !== 'all' && invoice.client_name !== clientFilter) return false
     
     // Date range filter
     if (startDate || endDate) {
-      const invoiceDate = new Date(invoice.createdDate)
+      const invoiceDate = new Date(invoice.created_date)
       const start = startDate ? new Date(startDate) : new Date('1900-01-01')
       const end = endDate ? new Date(endDate) : new Date('2100-12-31')
       if (invoiceDate < start || invoiceDate > end) return false
@@ -571,8 +595,8 @@ This invoice was generated automatically by TeamFlow.`
       </div>
 
       {/* Invoices Table */}
-      <div className="bg-dark-200 rounded-xl border border-dark-300 overflow-hidden">
-        <div className="overflow-x-auto">
+      <div className="bg-dark-200 rounded-xl border border-dark-300">
+        <div>
           <table className="w-full">
             <thead className="bg-dark-300 border-b border-dark-400">
               <tr>
@@ -603,7 +627,7 @@ This invoice was generated automatically by TeamFlow.`
                   </td>
                   {currentUser.role !== 'client' && (
                     <td className="py-4 px-6">
-                      <span className="text-white font-medium">{invoice.client}</span>
+                      <span className="text-white font-medium">{invoice.client_name}</span>
                     </td>
                   )}
                   <td className="py-4 px-6">
@@ -626,11 +650,11 @@ This invoice was generated automatically by TeamFlow.`
                   </td>
                   <td className="py-4 px-6">
                     <span className="text-dark-500 text-sm">
-                      {new Date(invoice.dateRange.start).toLocaleDateString()} - {new Date(invoice.dateRange.end).toLocaleDateString()}
+                      {new Date(invoice.date_range.start).toLocaleDateString()} - {new Date(invoice.date_range.end).toLocaleDateString()}
                     </span>
                   </td>
                   <td className="py-4 px-6">
-                    <span className="text-dark-500">{new Date(invoice.dueDate).toLocaleDateString()}</span>
+                    <span className="text-dark-500">{new Date(invoice.due_date).toLocaleDateString()}</span>
                   </td>
                   <td className="py-4 px-6">
                     <div className="flex items-center space-x-2">
@@ -654,10 +678,10 @@ This invoice was generated automatically by TeamFlow.`
                             <button className="p-2 text-dark-500 hover:text-white hover:bg-dark-400 rounded transition-colors duration-200">
                               <MoreHorizontal className="w-4 h-4" />
                             </button>
-                            <div className="absolute right-0 top-full mt-1 bg-dark-300 border border-dark-400 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10 min-w-[120px]">
+                            <div className="absolute right-0 top-full mt-1 bg-dark-300 border border-dark-400 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 min-w-[120px]">
                               <button
                                 onClick={() => updateInvoiceStatus(invoice.id, 'paid')}
-                                className="w-full text-left px-3 py-2 text-sm text-white hover:bg-dark-400 transition-colors duration-200"
+                                className="w-full text-left px-3 py-2 text-sm text-white hover:bg-dark-400 transition-colors duration-200 rounded-t-lg"
                               >
                                 Mark as Paid
                               </button>
@@ -675,7 +699,7 @@ This invoice was generated automatically by TeamFlow.`
                               </button>
                               <button
                                 onClick={() => deleteInvoice(invoice.id)}
-                                className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-dark-400 transition-colors duration-200"
+                                className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-dark-400 transition-colors duration-200 rounded-b-lg"
                               >
                                 Delete
                               </button>
@@ -707,33 +731,21 @@ This invoice was generated automatically by TeamFlow.`
             animate={{ opacity: 1, scale: 1 }}
             className="bg-dark-200 rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
           >
-            <h3 className="text-xl font-bold text-gray-800 mb-6">Create New Invoice</h3>
+            <h3 className="text-xl font-bold text-white-800 mb-6">Create New Invoice</h3>
 
             <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-dark-500 mb-2">Client *</label>
-                  <select
-                    value={selectedClient}
-                    onChange={(e) => setSelectedClient(e.target.value)}
-                    className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
-                  >
-                    <option value="">Select a client</option>
-                    {clients.map(client => (
-                      <option key={client.id} value={client.name}>{client.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-dark-500 mb-2">Hourly Rate ($) *</label>
-                  <input
-                    type="number"
-                    value={hourlyRate}
-                    onChange={(e) => setHourlyRate(Number(e.target.value))}
-                    className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-dark-500 mb-2">Client *</label>
+                <select
+                  value={selectedClient}
+                  onChange={(e) => setSelectedClient(e.target.value)}
+                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
+                >
+                  <option value="">Select a client</option>
+                  {clients.map(client => (
+                    <option key={client.id} value={client.name}>{client.name}</option>
+                  ))}
+                </select>
               </div>
 
               <div>
@@ -760,16 +772,120 @@ This invoice was generated automatically by TeamFlow.`
                 </div>
               </div>
 
+              {/* Additional Items Section */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <label className="block text-sm font-medium text-dark-500">Additional Items</label>
+                  <button
+                    type="button"
+                    onClick={() => setAdditionalItems(prev => [...prev, {
+                      description: '',
+                      hours: 0,
+                      rate: currentUser?.hourly_rate || 80,
+                      amount: 0,
+                      type: 'additional'
+                    }])}
+                    className="text-secondary hover:text-secondary/80 text-sm"
+                  >
+                    + Add Item
+                  </button>
+                </div>
+                
+                {additionalItems.length > 0 && (
+                  <div className="space-y-3 bg-dark-300 rounded-lg p-4">
+                    {additionalItems.map((item, index) => (
+                      <div key={index} className="grid grid-cols-12 gap-2 items-end">
+                        <div className="col-span-5">
+                          <label className="block text-xs text-dark-500 mb-1">Description</label>
+                          <input
+                            type="text"
+                            value={item.description}
+                            onChange={(e) => {
+                              const newItems = [...additionalItems]
+                              newItems[index].description = e.target.value
+                              setAdditionalItems(newItems)
+                            }}
+                            className="w-full bg-gray-100 border border-gray-300 rounded px-3 py-1 text-gray-900 text-sm"
+                            placeholder="Item description"
+                          />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="block text-xs text-dark-500 mb-1">Hours</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={item.hours}
+                            onChange={(e) => {
+                              const newItems = [...additionalItems]
+                              const hours = parseFloat(e.target.value) || 0
+                              newItems[index].hours = hours
+                              newItems[index].amount = hours * newItems[index].rate
+                              setAdditionalItems(newItems)
+                            }}
+                            className="w-full bg-gray-100 border border-gray-300 rounded px-3 py-1 text-gray-900 text-sm"
+                          />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="block text-xs text-dark-500 mb-1">Rate ($)</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={item.rate}
+                            onChange={(e) => {
+                              const newItems = [...additionalItems]
+                              const rate = parseFloat(e.target.value) || 0
+                              newItems[index].rate = rate
+                              newItems[index].amount = newItems[index].hours * rate
+                              setAdditionalItems(newItems)
+                            }}
+                            className="w-full bg-gray-100 border border-gray-300 rounded px-3 py-1 text-gray-900 text-sm"
+                          />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="block text-xs text-dark-500 mb-1">Amount</label>
+                          <div className="bg-dark-400 rounded px-3 py-1 text-white text-sm">
+                            ${item.amount.toFixed(2)}
+                          </div>
+                        </div>
+                        <div className="col-span-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newItems = additionalItems.filter((_, i) => i !== index)
+                              setAdditionalItems(newItems)
+                            }}
+                            className="p-1 text-red-400 hover:text-red-300 transition-colors duration-200"
+                            title="Remove item"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {selectedClient && invoiceDateRange.start && invoiceDateRange.end && (
                 <div className="bg-dark-300 rounded-lg p-4">
-                  <h4 className="font-medium text-gray-700 mb-3">Invoice Preview</h4>
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="font-medium text-gray-700">Invoice Preview</h4>
+                    {invoiceDateRange.start === currentMonth.start && invoiceDateRange.end === currentMonth.end && (
+                      <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-1 rounded">Current Month</span>
+                    )}
+                  </div>
                   {invoicePreview.items.length > 0 ? (
                     <div className="space-y-3">
                       <div className="space-y-2">
                         {invoicePreview.items.map((item, index) => (
                           <div key={index} className="flex justify-between text-sm">
-                            <span className="text-dark-500">{item.description}</span>
-                            <span className="text-white">{item.hours}h × ${item.rate} = ${(item.hours * item.rate).toFixed(2)}</span>
+                            <div className="flex-1">
+                              <span className="text-dark-500">{item.description}</span>
+                              {item.type === 'additional' && (
+                                <span className="ml-2 px-2 py-1 bg-orange-500/20 text-orange-400 text-xs rounded">Additional</span>
+                              )}
+                            </div>
+                            <span className="text-white">{item.hours}h × ${item.rate} = ${item.amount.toFixed(2)}</span>
                           </div>
                         ))}
                       </div>
@@ -779,7 +895,9 @@ This invoice was generated automatically by TeamFlow.`
                       </div>
                     </div>
                   ) : (
-                    <p className="text-dark-500 text-sm">No time entries found for the selected period</p>
+                    <p className="text-dark-500 text-sm">
+                      {additionalItems.length > 0 ? 'Only additional items added' : 'No time entries or additional items found for this period'}
+                    </p>
                   )}
                 </div>
               )}
@@ -787,7 +905,10 @@ This invoice was generated automatically by TeamFlow.`
 
             <div className="flex justify-end space-x-3 mt-6">
               <button
-                onClick={() => setShowCreateModal(false)}
+                onClick={() => {
+                  setShowCreateModal(false)
+                  resetInvoiceForm()
+                }}
                 className="px-4 py-2 text-dark-500 hover:text-white transition-colors duration-200"
               >
                 Cancel
@@ -826,7 +947,7 @@ This invoice was generated automatically by TeamFlow.`
               <div>
                 <label className="block text-sm font-medium text-dark-500 mb-2">To:</label>
                 <div className="bg-dark-300 rounded-lg px-4 py-2 text-white">
-                  {selectedInvoice.clientEmail}
+                  {selectedInvoice.client_email}
                 </div>
               </div>
 
@@ -902,7 +1023,7 @@ This invoice was generated automatically by TeamFlow.`
               <div className="grid grid-cols-2 gap-6">
                 <div>
                   <h4 className="font-medium text-gray-700 mb-2">Client</h4>
-                  <p className="text-dark-500">{selectedInvoice.client}</p>
+                  <p className="text-dark-500">{selectedInvoice.client_name}</p>
                 </div>
                 <div>
                   <h4 className="font-medium text-gray-700 mb-2">Status</h4>
@@ -916,12 +1037,12 @@ This invoice was generated automatically by TeamFlow.`
                 <div>
                   <h4 className="font-medium text-gray-700 mb-2">Invoice Period</h4>
                   <p className="text-dark-500">
-                    {new Date(selectedInvoice.dateRange.start).toLocaleDateString()} - {new Date(selectedInvoice.dateRange.end).toLocaleDateString()}
+                    {new Date(selectedInvoice.date_range.start).toLocaleDateString()} - {new Date(selectedInvoice.date_range.end).toLocaleDateString()}
                   </p>
                 </div>
                 <div>
                   <h4 className="font-medium text-gray-700 mb-2">Due Date</h4>
-                  <p className="text-dark-500">{new Date(selectedInvoice.dueDate).toLocaleDateString()}</p>
+                  <p className="text-dark-500">{new Date(selectedInvoice.due_date).toLocaleDateString()}</p>
                 </div>
               </div>
 
@@ -943,7 +1064,7 @@ This invoice was generated automatically by TeamFlow.`
                           <td className="py-3 px-4 text-white">{item.description}</td>
                           <td className="py-3 px-4 text-white">{item.hours}h</td>
                           <td className="py-3 px-4 text-white">${item.rate}</td>
-                          <td className="py-3 px-4 text-white">${(item.hours * item.rate).toLocaleString()}</td>
+                          <td className="py-3 px-4 text-white">${item.amount.toLocaleString()}</td>
                         </tr>
                       ))}
                       <tr className="border-t border-dark-400 bg-dark-400">

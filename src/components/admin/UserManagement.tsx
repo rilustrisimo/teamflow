@@ -34,7 +34,7 @@ const UserManagement = () => {
     email: '',
     password: '',
     full_name: '',
-    company_name: '',
+    company_id: '',
     role: 'team-member',
     hourly_rate: 0
   })
@@ -48,7 +48,7 @@ const UserManagement = () => {
 
   const [editData, setEditData] = useState<UpdateUserData>({
     full_name: '',
-    company_name: '',
+    company_id: '',
     role: 'team-member',
     hourly_rate: 0
   })
@@ -204,7 +204,7 @@ const UserManagement = () => {
       email: '',
       password: '',
       full_name: '',
-      company_name: '',
+      company_id: '',
       role: 'team-member',
       hourly_rate: 0
     })
@@ -223,7 +223,7 @@ const UserManagement = () => {
     setEditingUser(user)
     setEditData({
       full_name: user.full_name,
-      company_name: user.company_name || '',
+      company_id: user.company_id || '',
       role: user.role,
       hourly_rate: user.hourly_rate || 0
     })
@@ -343,7 +343,6 @@ const UserManagement = () => {
               <option value="admin">Admin</option>
               <option value="manager">Manager</option>
               <option value="team-member">Team Member</option>
-              <option value="client">Client</option>
             </select>
           </div>
         </div>
@@ -500,15 +499,18 @@ const UserManagement = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-1">
-                  Company
+                  Company (auto-assigned)
                 </label>
                 <input
                   type="text"
-                  value={newUser.company_name}
-                  onChange={(e) => setNewUser({ ...newUser, company_name: e.target.value })}
-                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-blue-500"
-                  placeholder="Company Name"
+                  value="Same as admin's company"
+                  disabled={true}
+                  className="w-full bg-gray-600 border border-gray-600 rounded-lg px-3 py-2 text-gray-400 cursor-not-allowed"
+                  placeholder="Company will be auto-assigned"
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  New users will be automatically assigned to your company.
+                </p>
               </div>
 
               <div>
@@ -523,7 +525,6 @@ const UserManagement = () => {
                   <option value="team-member">Team Member</option>
                   <option value="manager">Manager</option>
                   <option value="admin">Admin</option>
-                  <option value="client">Client</option>
                 </select>
               </div>
 
@@ -619,7 +620,6 @@ const UserManagement = () => {
                   <option value="team-member">Team Member</option>
                   <option value="manager">Manager</option>
                   <option value="admin">Admin</option>
-                  <option value="client">Client</option>
                 </select>
               </div>
 
@@ -704,15 +704,17 @@ const UserManagement = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-1">
-                  Company
+                  Company (read-only)
                 </label>
                 <input
                   type="text"
-                  value={editData.company_name || ''}
-                  onChange={(e) => setEditData({ ...editData, company_name: e.target.value })}
-                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-blue-500"
-                  placeholder="Company Name"
+                  value={editingUser.company_name || 'No company assigned'}
+                  disabled={true}
+                  className="w-full bg-gray-600 border border-gray-600 rounded-lg px-3 py-2 text-gray-400 cursor-not-allowed"
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  Company assignments cannot be changed through this interface.
+                </p>
               </div>
 
               <div>
@@ -727,7 +729,6 @@ const UserManagement = () => {
                   <option value="team-member">Team Member</option>
                   <option value="manager">Manager</option>
                   <option value="admin">Admin</option>
-                  <option value="client">Client</option>
                 </select>
               </div>
 

@@ -26,6 +26,7 @@ export interface AdminUser {
   id: string
   email: string
   full_name: string
+  company_id: string | null
   company_name: string | null
   role: 'admin' | 'manager' | 'team-member' | 'client'
   hourly_rate: number | null
@@ -39,14 +40,14 @@ export interface CreateUserData {
   email: string
   password: string
   full_name: string
-  company_name?: string
+  company_id?: string
   role: 'admin' | 'manager' | 'team-member' | 'client'
   hourly_rate?: number
 }
 
 export interface UpdateUserData {
   full_name?: string
-  company_name?: string
+  company_id?: string
   role?: 'admin' | 'manager' | 'team-member' | 'client'
   hourly_rate?: number
 }
@@ -104,6 +105,7 @@ export class AdminService {
           id: profile.user_id,
           email: authUser?.email || '',
           full_name: profile.full_name,
+          company_id: profile.company_id,
           company_name: profile.company_name,
           role: profile.role,
           hourly_rate: profile.hourly_rate,
@@ -149,7 +151,7 @@ export class AdminService {
         email_confirm: true, // Auto-confirm email
         user_metadata: {
           full_name: userData.full_name,
-          company_name: userData.company_name,
+          company_id: userData.company_id || adminProfile.company_id,
           role: userData.role,
           hourly_rate: userData.hourly_rate,
           is_admin_signup: false, // This is not an admin signup
@@ -185,6 +187,7 @@ export class AdminService {
         id: authData.user.id,
         email: authData.user.email || '',
         full_name: profile.full_name,
+        company_id: profile.company_id,
         company_name: profile.company_name,
         role: profile.role,
         hourly_rate: profile.hourly_rate,
@@ -202,11 +205,11 @@ export class AdminService {
   // Update user profile
   static async updateUser(userId: string, userData: UpdateUserData): Promise<AdminUser> {
     try {
-      // Update profile
+      // Update profile using user_id, not id
       const { data: profile, error: profileError } = await supabaseAdmin
         .from('profiles')
         .update(userData)
-        .eq('id', userId)
+        .eq('user_id', userId)
         .select()
         .single()
 
@@ -224,9 +227,10 @@ export class AdminService {
       }
 
       return {
-        id: profile.id,
+        id: profile.user_id, // Use user_id as the ID, not profile.id
         email: authUser.user?.email || '',
         full_name: profile.full_name,
+        company_id: profile.company_id,
         company_name: profile.company_name,
         role: profile.role,
         hourly_rate: profile.hourly_rate,

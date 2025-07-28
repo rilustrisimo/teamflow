@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { motion } from 'framer-motion'
+import { createPortal } from 'react-dom'
 import { useAppContext } from '../context/AppContext'
 import { Plus, Edit, Mail, Phone, Building, Clock, FileText, X, Save, Eye, MoreHorizontal, Loader2 } from 'lucide-react'
 
@@ -8,19 +9,52 @@ const Clients = () => {
   const [showAddClientModal, setShowAddClientModal] = useState(false)
   const [editingClient, setEditingClient] = useState<string | null>(null)
   const [selectedClient, setSelectedClient] = useState<any>(null)
+  const [activeDropdown, setActiveDropdown] = useState<string | null>(null)
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, right: 0 })
   const [newClient, setNewClient] = useState({
     name: '',
     email: '',
     phone: ''
   })
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (activeDropdown && !(event.target as Element).closest('.dropdown-trigger')) {
+        setActiveDropdown(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [activeDropdown])
+
+  const handleDropdownToggle = (clientId: string, event: React.MouseEvent) => {
+    event.stopPropagation()
+    
+    if (activeDropdown === clientId) {
+      setActiveDropdown(null)
+      return
+    }
+
+    const buttonElement = event.currentTarget as HTMLButtonElement
+    const rect = buttonElement.getBoundingClientRect()
+    
+    setDropdownPosition({
+      top: rect.bottom + window.scrollY + 4,
+      right: window.innerWidth - rect.right - window.scrollX
+    })
+    setActiveDropdown(clientId)
+  }
+
   // Helper functions to calculate metrics (excluding archived projects)
   const getClientTotalHours = (clientId: string) => {
     const clientProjects = projects.filter(p => p.client_id === clientId && !p.archived)
     const projectIds = clientProjects.map(p => p.id)
-    return timeEntries
+    const totalMinutes = timeEntries
       .filter(entry => projectIds.includes(entry.project_id || ''))
       .reduce((sum, entry) => sum + (entry.duration || 0), 0)
+    // Convert minutes to hours
+    return totalMinutes / 60
   }
 
   const getClientActiveProjects = (clientId: string) => {
@@ -32,7 +66,11 @@ const Clients = () => {
     const projectIds = clientProjects.map(p => p.id)
     return timeEntries
       .filter(entry => projectIds.includes(entry.project_id || ''))
-      .reduce((sum, entry) => sum + ((entry.duration || 0) / 60) * 50, 0) // Convert minutes to hours, assuming $50/hour rate
+      .reduce((sum, entry) => {
+        const durationInHours = (entry.duration || 0) / 60 // Convert minutes to hours
+        const hourlyRate = entry.user_profile?.hourly_rate || 0 // Get actual user rate
+        return sum + (durationInHours * hourlyRate)
+      }, 0)
   }
 
   const getClientLastActivity = (clientId: string) => {
@@ -162,8 +200,8 @@ const Clients = () => {
       </div>
 
       {/* Clients Table */}
-      <div className="bg-dark-200 rounded-xl border border-dark-300 overflow-hidden">
-        <div className="overflow-x-auto">
+      <div className="bg-dark-200 rounded-xl border border-dark-300">
+        <div className="overflow-x-auto overflow-y-visible">
           <table className="w-full">
             <thead className="bg-dark-300 border-b border-dark-400">
               <tr>
@@ -199,7 +237,7 @@ const Clients = () => {
                 </tr>
               ) : (
                 clients.map((client) => (
-                <tr key={client.id} className="hover:bg-dark-300/30 transition-colors duration-200">
+                <tr key={client.id} className="hover:bg-dark-300/30 transition-colors duration-200 relative">
                   <td className="py-4 px-6">
                     {editingClient === client.id ? (
                       <input
@@ -271,7 +309,7 @@ const Clients = () => {
                   <td className="py-4 px-6">
                     <span className="text-dark-500 text-sm">{new Date(getClientLastActivity(client.id)).toLocaleDateString()}</span>
                   </td>
-                  <td className="py-4 px-6">
+                  <td className="py-4 px-6 relative">
                     <div className="flex items-center space-x-2">
                       {editingClient === client.id ? (
                         <>
@@ -293,7 +331,13 @@ const Clients = () => {
                       ) : (
                         <>
                           <button
-                            onClick={() => setSelectedClient(client)}
+                            onClick={() => setSelectedClient({
+                              ...client,
+                              totalHours: getClientTotalHours(client.id).toFixed(2),
+                              activeProjects: getClientActiveProjects(client.id),
+                              totalRevenue: getClientTotalRevenue(client.id),
+                              lastActivity: getClientLastActivity(client.id)
+                            })}
                             className="p-1 text-dark-500 hover:text-white transition-colors duration-200"
                             title="View Details"
                           >
@@ -306,19 +350,12 @@ const Clients = () => {
                           >
                             <Edit className="w-4 h-4" />
                           </button>
-                          <div className="relative group">
-                            <button className="p-1 text-dark-500 hover:text-white transition-colors duration-200">
-                              <MoreHorizontal className="w-4 h-4" />
-                            </button>
-                            <div className="absolute right-0 top-full mt-1 bg-dark-300 border border-dark-400 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10 min-w-[120px]">
-                              <button
-                                onClick={() => handleDeleteClient(client.id)}
-                                className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-dark-400 transition-colors duration-200"
-                              >
-                                Delete Client
-                              </button>
-                            </div>
-                          </div>
+                          <button
+                            onClick={(e) => handleDropdownToggle(client.id, e)}
+                            className="dropdown-trigger p-1 text-dark-500 hover:text-white transition-colors duration-200"
+                          >
+                            <MoreHorizontal className="w-4 h-4" />
+                          </button>
                         </>
                       )}
                     </div>
@@ -340,7 +377,7 @@ const Clients = () => {
             className="bg-dark-200 rounded-xl p-6 max-w-md w-full"
           >
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-gray-800">Add New Client</h3>
+              <h3 className="text-xl font-bold text-white-800">Add New Client</h3>
               <button
                 onClick={() => setShowAddClientModal(false)}
                 className="text-dark-500 hover:text-white"
@@ -411,7 +448,7 @@ const Clients = () => {
             className="bg-dark-200 rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-gray-800">{selectedClient.name}</h3>
+              <h3 className="text-xl font-bold text-white-800">{selectedClient.name}</h3>
               <button
                 onClick={() => setSelectedClient(null)}
                 className="text-dark-500 hover:text-white"
@@ -423,7 +460,7 @@ const Clients = () => {
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-6">
                 <div>
-                  <h4 className="font-medium text-gray-700 mb-2">Contact Information</h4>
+                  <h4 className="font-medium text-white-700 mb-2">Contact Information</h4>
                   <div className="space-y-2">
                     <div className="flex items-center space-x-2 text-sm">
                       <Mail className="w-4 h-4 text-dark-500" />
@@ -464,7 +501,7 @@ const Clients = () => {
               </div>
 
               <div>
-                <h4 className="font-medium text-gray-700 mb-2">Last Activity</h4>
+                <h4 className="font-medium text-white-700 mb-2">Last Activity</h4>
                 <p className="text-dark-500">{new Date(selectedClient.lastActivity).toLocaleDateString()}</p>
               </div>
             </div>
@@ -479,6 +516,28 @@ const Clients = () => {
             </div>
           </motion.div>
         </div>
+      )}
+
+      {/* Portal-based dropdown menu */}
+      {activeDropdown && createPortal(
+        <div 
+          className="fixed bg-dark-300 border border-dark-400 rounded-lg shadow-lg z-[10000] min-w-[120px]"
+          style={{
+            top: `${dropdownPosition.top}px`,
+            right: `${dropdownPosition.right}px`
+          }}
+        >
+          <button
+            onClick={() => {
+              handleDeleteClient(activeDropdown)
+              setActiveDropdown(null)
+            }}
+            className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-dark-400 transition-colors duration-200 rounded-lg"
+          >
+            Delete Client
+          </button>
+        </div>,
+        document.body
       )}
     </div>
   )
