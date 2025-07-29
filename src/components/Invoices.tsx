@@ -299,7 +299,7 @@ const Invoices = () => {
       return
     }
     try {
-      const { items, totalHours, totalAmount } = getInvoicePreview()
+      const { items, totalAmount } = getInvoicePreview()
       if (items.length === 0) {
         alert('No time entries or additional items found for the selected client and date range')
         return
@@ -312,7 +312,6 @@ const Invoices = () => {
       }
 
       // Prepare invoice data for invoices table (schema-compliant)
-      const company_id = client.company_id
       const client_id = client.id
       const invoice_number = `INV-${Date.now()}`
       const status = 'draft'

@@ -1,4 +1,3 @@
-import React from 'react'
 import { useAppContext } from '../context/AppContext'
 import { usePermissions } from '../hooks/usePermissions'
 import { 
@@ -11,7 +10,6 @@ import {
   Target,
   DollarSign,
   Home,
-  TrendingUp,
   Calendar,
   Archive,
   Kanban
@@ -145,7 +143,7 @@ export const useRoleBasedNavigation = () => {
     items.push({
       id: 'financial',
       label: 'Financial',
-      icon: TrendingUp,
+      // icon: TrendingUp, // Removed unused import
       color: 'text-emerald-500',
       description: 'Financial overview and analytics'
     })

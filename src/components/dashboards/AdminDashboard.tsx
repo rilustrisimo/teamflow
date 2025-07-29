@@ -1,18 +1,8 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAppContext } from '../../context/AppContext'
-import { 
-  Users, 
-  FileText, 
-  DollarSign,
-  Clock,
-  Settings,
-  Shield,
-  AlertCircle,
-  CheckCircle,
-  BarChart3
-} from 'lucide-react'
+import { Users, FileText, DollarSign, Clock, Shield, BarChart3 } from 'lucide-react'
 
 const AdminDashboard = () => {
   const navigate = useNavigate()
@@ -96,21 +86,6 @@ const AdminDashboard = () => {
       icon: Clock,
       color: 'text-orange-500'
     }
-  ]
-
-  // Recent activities for admin overview
-  const recentActivities = [
-    { type: 'User', message: 'New user registered', time: '2 hours ago' },
-    { type: 'Project', message: 'Project deadline approaching', time: '4 hours ago' },
-    { type: 'Invoice', message: 'Payment received', time: '1 day ago' }
-  ]
-
-  // System health indicators
-  const systemHealth = [
-    { name: 'Database', status: 'healthy', color: 'text-green-500' },
-    { name: 'Authentication', status: 'healthy', color: 'text-green-500' },
-    { name: 'File Storage', status: 'healthy', color: 'text-green-500' },
-    { name: 'Email Service', status: 'warning', color: 'text-yellow-500' }
   ]
 
   return (
