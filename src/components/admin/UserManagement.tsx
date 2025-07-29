@@ -439,7 +439,7 @@ const UserManagement = () => {
             className="bg-gray-800 rounded-lg p-6 w-full max-w-md"
           >
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-gray-800">Create New User</h3>
+              <h3 className="text-xl font-bold text-white-800">Create New User</h3>
               <button
                 onClick={() => setShowCreateModal(false)}
                 className="text-gray-400 hover:text-white"
@@ -572,7 +572,7 @@ const UserManagement = () => {
             className="bg-gray-800 rounded-lg p-6 w-full max-w-md"
           >
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-gray-800">Invite User</h3>
+              <h3 className="text-xl font-bold text-white-800">Invite User</h3>
               <button
                 onClick={() => setShowInviteModal(false)}
                 className="text-gray-400 hover:text-white"
@@ -667,7 +667,7 @@ const UserManagement = () => {
             className="bg-gray-800 rounded-lg p-6 w-full max-w-md"
           >
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-gray-800">Edit User</h3>
+              <h3 className="text-xl font-bold text-white-800">Edit User</h3>
               <button
                 onClick={() => setEditingUser(null)}
                 className="text-gray-400 hover:text-white"

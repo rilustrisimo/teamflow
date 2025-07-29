@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import jsPDF from 'jspdf'
 import { motion } from 'framer-motion'
 import { useAppContext } from '../context/AppContext'
 import { EmailService } from '../lib/emailService'
@@ -31,6 +32,93 @@ interface InvoiceItem {
 }
 
 const Invoices = () => {
+  // Download PDF handler
+  const handleDownloadPDF = () => {
+    if (!selectedInvoice) return;
+    const pdf = new jsPDF({ orientation: 'p', unit: 'pt', format: 'a4' });
+    const margin = 40;
+    let y = margin;
+
+    // Header
+    pdf.setFontSize(22);
+    pdf.setTextColor('#23272f');
+    pdf.text('INVOICE', margin, y);
+    pdf.setFontSize(12);
+    y += 30;
+
+    // Invoice Info
+    pdf.setFont('helvetica', 'bold');
+    pdf.text(`Invoice #:`, margin, y);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(`${selectedInvoice.id}`, margin + 80, y);
+    y += 18;
+    pdf.setFont('helvetica', 'bold');
+    pdf.text(`Client:`, margin, y);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(selectedInvoice.client_name, margin + 80, y);
+    y += 18;
+    pdf.setFont('helvetica', 'bold');
+    pdf.text(`Status:`, margin, y);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(selectedInvoice.status.charAt(0).toUpperCase() + selectedInvoice.status.slice(1), margin + 80, y);
+    y += 18;
+    pdf.setFont('helvetica', 'bold');
+    pdf.text(`Period:`, margin, y);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(`${new Date(selectedInvoice.date_range?.start ?? '').toLocaleDateString()} - ${new Date(selectedInvoice.date_range?.end ?? '').toLocaleDateString()}`, margin + 80, y);
+    y += 18;
+    pdf.setFont('helvetica', 'bold');
+    pdf.text(`Due Date:`, margin, y);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(new Date(selectedInvoice.due_date).toLocaleDateString(), margin + 80, y);
+    y += 30;
+
+    // Table header
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFillColor('#f3f4f6');
+    pdf.rect(margin, y - 12, 500, 24, 'F');
+    pdf.text('Description', margin + 4, y);
+    pdf.text('Hours', margin + 220, y);
+    pdf.text('Rate', margin + 300, y);
+    pdf.text('Amount', margin + 400, y);
+    y += 16;
+    pdf.setFont('helvetica', 'normal');
+
+    // Table rows
+    selectedInvoice.items.forEach((item) => {
+      pdf.text(item.description, margin + 4, y);
+      pdf.text(String(item.hours), margin + 220, y);
+      pdf.text(`$${item.rate}`, margin + 300, y);
+      pdf.text(`$${item.amount.toLocaleString()}`, margin + 400, y);
+      y += 18;
+    });
+
+    // Total row
+    y += 8;
+    pdf.setFont('helvetica', 'bold');
+    pdf.setDrawColor('#e5e7eb');
+    pdf.line(margin, y, margin + 500, y);
+    y += 18;
+    pdf.text('Total', margin + 4, y);
+    pdf.text(`${selectedInvoice.hours}h`, margin + 220, y);
+    pdf.text('', margin + 300, y);
+    pdf.setTextColor('#059669');
+    pdf.text(`$${selectedInvoice.amount.toLocaleString()}`, margin + 400, y);
+    pdf.setTextColor('#23272f');
+
+    // Notes (if any)
+    if (selectedInvoice.notes) {
+      y += 30;
+    pdf.setFont('helvetica', 'bold');
+      pdf.text('Notes:', margin, y);
+    pdf.setFont('helvetica', 'normal');
+      pdf.text(selectedInvoice.notes, margin + 50, y);
+    }
+
+    pdf.save(`Invoice-${selectedInvoice.id}.pdf`);
+  };
+  // Ref for invoice detail modal content (for PDF capture)
+  const invoiceDetailRef = useRef<HTMLDivElement | null>(null)
   const { clients, timeEntries, projects, currentUser } = useAppContext()
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [selectedClient, setSelectedClient] = useState('')
@@ -58,8 +146,6 @@ const Invoices = () => {
   const [additionalItems, setAdditionalItems] = useState<InvoiceItem[]>([])
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
   const [showEmailPreview, setShowEmailPreview] = useState(false)
-  const [emailSubject, setEmailSubject] = useState('')
-  const [emailBody, setEmailBody] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [clientFilter, setClientFilter] = useState('all')
   const [startDate, setStartDate] = useState('')
@@ -74,16 +160,23 @@ const Invoices = () => {
     return <div>Loading...</div>
   }
 
-  // Initialize invoices from localStorage or empty array
-  const [invoices, setInvoices] = useState<Invoice[]>(() => {
-    const saved = localStorage.getItem('invoices')
-    return saved ? JSON.parse(saved) : []
-  })
+  // Remove localStorage logic, use backend fetch for invoices
+  const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [loadingInvoices, setLoadingInvoices] = useState(true)
+  const [errorInvoices, setErrorInvoices] = useState('')
 
-  // Save invoices to localStorage whenever invoices change
   useEffect(() => {
-    localStorage.setItem('invoices', JSON.stringify(invoices))
-  }, [invoices])
+    setLoadingInvoices(true)
+    import('../lib/database').then(({ DatabaseService }) => {
+      DatabaseService.getInvoices()
+        .then(data => setInvoices(data || []))
+        .catch(err => {
+          setErrorInvoices('Failed to load invoices')
+          console.error('Failed to load invoices:', err)
+        })
+        .finally(() => setLoadingInvoices(false))
+    })
+  }, [])
 
   // Filter invoices based on user role
   const getFilteredInvoices = () => {
@@ -200,20 +293,17 @@ const Invoices = () => {
     setAdditionalItems([])
   }
 
-  const generateInvoice = () => {
+  const generateInvoice = async () => {
     if (!selectedClient || !invoiceDateRange.start || !invoiceDateRange.end) {
       alert('Please select client and date range')
       return
     }
-    
     try {
       const { items, totalHours, totalAmount } = getInvoicePreview()
-      
       if (items.length === 0) {
         alert('No time entries or additional items found for the selected client and date range')
         return
       }
-
       // Find client data
       const client = clients.find(c => c.name === selectedClient)
       if (!client) {
@@ -221,62 +311,72 @@ const Invoices = () => {
         return
       }
 
-      const newInvoice: Invoice = {
-        id: `INV-${String(invoices.length + 1).padStart(3, '0')}`,
-        client_id: client.id,
-        client_name: selectedClient,
-        amount: Math.round(totalAmount * 100) / 100,
-        hours: Math.round(totalHours * 100) / 100,
-        status: 'draft',
-        due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        created_date: new Date().toISOString().split('T')[0],
-        client_email: client.email || '',
-        balance: Math.round(totalAmount * 100) / 100,
-        date_range: { start: invoiceDateRange.start, end: invoiceDateRange.end },
-        items
+      // Prepare invoice data for invoices table (schema-compliant)
+      const company_id = client.company_id
+      const client_id = client.id
+      const invoice_number = `INV-${Date.now()}`
+      const status = 'draft'
+      const issue_date = new Date().toISOString().split('T')[0]
+      const due_date = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+      const subtotal = Math.round(totalAmount * 100) / 100
+      const tax_amount = 0 // Adjust if you have tax logic
+      const total_amount = subtotal + tax_amount
+      const notes = undefined // Add notes if needed
+      const created_by = currentUser?.user_id || ''
+
+      // Only pass fields required by the DB (company_id is added by the service)
+      const invoiceData = {
+        client_id,
+        invoice_number,
+        status,
+        issue_date,
+        due_date,
+        subtotal,
+        tax_amount,
+        total_amount,
+        notes,
+        created_by
       }
 
-      setInvoices(prev => [...prev, newInvoice])
+      // Items: only description, hours, rate, amount
+      const invoiceItems = items.map(item => ({
+        description: item.description,
+        hours: item.hours,
+        rate: item.rate,
+        amount: item.amount
+      }))
+
+      setLoading(true)
+      setError('')
+      setSuccess('')
+      const { DatabaseService } = await import('../lib/database')
+      // This will insert invoice and items in one call
+      const createdInvoice = await DatabaseService.createInvoice(invoiceData, invoiceItems)
+      if (!createdInvoice || !createdInvoice.id) {
+        throw new Error('Failed to create invoice record')
+      }
       setShowCreateModal(false)
       resetInvoiceForm()
-      alert(`Invoice ${newInvoice.id} created successfully!`)
+      setSuccess(`Invoice for ${selectedClient} created successfully!`)
+      // Refresh invoice list
+      setLoadingInvoices(true)
+      DatabaseService.getInvoices()
+        .then(data => setInvoices(data || []))
+        .catch(err => {
+          setErrorInvoices('Failed to load invoices')
+          console.error('Failed to load invoices:', err)
+        })
+        .finally(() => setLoadingInvoices(false))
     } catch (error) {
       console.error('Error creating invoice:', error)
-      alert('Error creating invoice. Please try again.')
+      setError('Error creating invoice. Please try again.')
+    } finally {
+      setLoading(false)
     }
   }
 
   const prepareEmailPreview = (invoice: Invoice) => {
-    const subject = `Invoice ${invoice.id} from TeamFlow - $${invoice.amount.toLocaleString()}`
-    const body = `Dear ${invoice.client_name} Team,
 
-I hope this email finds you well. Please find attached invoice ${invoice.id} for the services provided.
-
-Invoice Details:
-- Invoice Number: ${invoice.id}
-- Amount: $${invoice.amount.toLocaleString()}
-- Due Date: ${new Date(invoice.due_date).toLocaleDateString()}
-- Total Hours: ${invoice.hours}h
-- Period: ${new Date(invoice.date_range.start).toLocaleDateString()} - ${new Date(invoice.date_range.end).toLocaleDateString()}
-
-Services Provided:
-${invoice.items.map(item => `• ${item.description}: ${item.hours}h @ $${item.rate}/h = $${item.amount.toLocaleString()}`).join('\n')}
-
-Payment Terms: Net 30 days
-Payment can be made via bank transfer or check. Please reference invoice number ${invoice.id} with your payment.
-
-If you have any questions regarding this invoice, please don't hesitate to contact me.
-
-Thank you for your business!
-
-Best regards,
-Your TeamFlow Team
-
----
-This invoice was generated automatically by TeamFlow.`
-
-    setEmailSubject(subject)
-    setEmailBody(body)
     setSelectedInvoice(invoice)
     setShowEmailPreview(true)
   }
@@ -303,23 +403,26 @@ This invoice was generated automatically by TeamFlow.`
           total: item.amount
         })),
         dateRange: {
-          start: selectedInvoice.date_range.start,
-          end: selectedInvoice.date_range.end
+          start: selectedInvoice.date_range?.start,
+          end: selectedInvoice.date_range?.end
         }
       }
 
       // Send email using EmailService
       await EmailService.sendInvoiceEmail(invoiceData)
-      
-      // Update invoice status to sent
+
+      // Update invoice status to sent in DB
+      const { DatabaseService } = await import('../lib/database')
+      await DatabaseService.updateInvoice(selectedInvoice.id, { status: 'sent' })
+      // Update local state
       setInvoices(prev => prev.map(inv => 
         inv.id === selectedInvoice.id ? { ...inv, status: 'sent' } : inv
       ))
-      
+
       setShowEmailPreview(false)
       setSelectedInvoice(null)
       setSuccess('Invoice sent successfully!')
-      
+
       // Clear success message after 5 seconds
       setTimeout(() => setSuccess(''), 5000)
     } catch (error) {
@@ -333,8 +436,14 @@ This invoice was generated automatically by TeamFlow.`
     }
   }
 
-  const updateInvoiceStatus = (invoiceId: string, newStatus: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled') => {
+  const updateInvoiceStatus = async (invoiceId: string, newStatus: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled') => {
     try {
+      setLoading(true)
+      setError('')
+      const { DatabaseService } = await import('../lib/database')
+      // Update status in DB
+      await DatabaseService.updateInvoice(invoiceId, { status: newStatus })
+      // Update local state
       setInvoices(prev => prev.map(inv => 
         inv.id === invoiceId ? { 
           ...inv, 
@@ -342,37 +451,97 @@ This invoice was generated automatically by TeamFlow.`
           balance: newStatus === 'paid' ? 0 : inv.amount
         } : inv
       ))
+      setSuccess('Invoice status updated!')
+      setTimeout(() => setSuccess(''), 3000)
     } catch (error) {
       console.error('Error updating invoice status:', error)
+      setError('Failed to update invoice status.')
+      setTimeout(() => setError(''), 5000)
+    } finally {
+      setLoading(false)
     }
   }
 
-  const deleteInvoice = (invoiceId: string) => {
+  const deleteInvoice = async (invoiceId: string) => {
     if (confirm('Are you sure you want to delete this invoice?')) {
       try {
+        setLoading(true)
+        setError('')
+        const { DatabaseService } = await import('../lib/database')
+        await DatabaseService.deleteInvoice(invoiceId)
         setInvoices(prev => prev.filter(inv => inv.id !== invoiceId))
+        setSuccess('Invoice deleted!')
+        setTimeout(() => setSuccess(''), 3000)
       } catch (error) {
         console.error('Error deleting invoice:', error)
+        setError('Failed to delete invoice.')
+        setTimeout(() => setError(''), 5000)
+      } finally {
+        setLoading(false)
       }
     }
   }
 
   // Filter invoices
   const baseInvoices = getFilteredInvoices()
-  const filteredInvoices = baseInvoices.filter(invoice => {
-    if (statusFilter !== 'all' && invoice.status !== statusFilter) return false
-    if (currentUser.role !== 'client' && clientFilter !== 'all' && invoice.client_name !== clientFilter) return false
-    
-    // Date range filter
-    if (startDate || endDate) {
-      const invoiceDate = new Date(invoice.created_date)
-      const start = startDate ? new Date(startDate) : new Date('1900-01-01')
-      const end = endDate ? new Date(endDate) : new Date('2100-12-31')
-      if (invoiceDate < start || invoiceDate > end) return false
-    }
-    
-    return true
-  })
+  // Map backend invoice shape to frontend Invoice interface for rendering
+  const filteredInvoices = baseInvoices
+    .filter(invoice => {
+      // Use 'as any' to access backend fields if present
+      const backend = invoice as any;
+      if (statusFilter !== 'all' && invoice.status !== statusFilter) return false
+      const clientName = invoice.client_name || backend.client?.name || ''
+      if (currentUser.role !== 'client' && clientFilter !== 'all' && clientName !== clientFilter) return false
+      // Date range filter
+      const createdDate = invoice.created_date || backend.issue_date || backend.created_at
+      if (startDate || endDate) {
+        const invoiceDate = new Date(createdDate)
+        const start = startDate ? new Date(startDate) : new Date('1900-01-01')
+        const end = endDate ? new Date(endDate) : new Date('2100-12-31')
+        if (invoiceDate < start || invoiceDate > end) return false
+      }
+      return true
+    })
+    .map(invoice => {
+      const backend = invoice as any;
+      const clientName = invoice.client_name || backend.client?.name || ''
+      const clientEmail = invoice.client_email || backend.client?.email || ''
+      // Try to get date_range from invoice, fallback to null
+      let dateRange = invoice.date_range
+      // Acceptable keys for start/end
+      const start = backend.start_date || backend.period_start || backend.periodStart || ''
+      const end = backend.end_date || backend.period_end || backend.periodEnd || ''
+      if (!dateRange && start && end) {
+        dateRange = { start, end }
+      }
+      // If still not valid, fallback to empty strings
+      if (!dateRange || !dateRange.start || !dateRange.end) {
+        dateRange = { start: '', end: '' }
+      }
+      // Calculate amount and balance
+      const amount = invoice.amount ?? backend.total_amount ?? 0
+      const balance = invoice.balance ?? (invoice.status === 'paid' ? 0 : amount)
+      // Calculate hours if possible
+      let hours = invoice.hours
+      if (typeof hours === 'undefined' && Array.isArray(invoice.items)) {
+        hours = invoice.items.reduce((sum, item) => sum + (item.hours ?? 0), 0)
+      }
+      return {
+        id: invoice.id,
+        client_id: invoice.client_id,
+        client_name: clientName,
+        amount,
+        hours: hours ?? 0,
+        status: invoice.status,
+        due_date: invoice.due_date,
+        created_date: invoice.created_date || backend.issue_date || backend.created_at,
+        items: invoice.items || [],
+        client_email: clientEmail,
+        balance,
+        date_range: dateRange,
+        notes: invoice.notes
+      }
+    })
 
   const invoicePreview = getInvoicePreview()
 
@@ -597,122 +766,146 @@ This invoice was generated automatically by TeamFlow.`
       {/* Invoices Table */}
       <div className="bg-dark-200 rounded-xl border border-dark-300">
         <div>
-          <table className="w-full">
-            <thead className="bg-dark-300 border-b border-dark-400">
-              <tr>
-                <th className="text-left py-4 px-6 text-dark-500 font-medium uppercase text-xs tracking-wider">Status</th>
-                <th className="text-left py-4 px-6 text-dark-500 font-medium uppercase text-xs tracking-wider">Number</th>
-                {currentUser.role !== 'client' && (
-                  <th className="text-left py-4 px-6 text-dark-500 font-medium uppercase text-xs tracking-wider">Client</th>
-                )}
-                <th className="text-left py-4 px-6 text-dark-500 font-medium uppercase text-xs tracking-wider">Amount</th>
-                <th className="text-left py-4 px-6 text-dark-500 font-medium uppercase text-xs tracking-wider">
-                  {currentUser.role === 'client' ? 'Payment Status' : 'Balance'}
-                </th>
-                <th className="text-left py-4 px-6 text-dark-500 font-medium uppercase text-xs tracking-wider">Period</th>
-                <th className="text-left py-4 px-6 text-dark-500 font-medium uppercase text-xs tracking-wider">Due Date</th>
-                <th className="text-left py-4 px-6 text-dark-500 font-medium uppercase text-xs tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-dark-300">
-              {filteredInvoices.map((invoice) => (
-                <tr key={invoice.id} className="hover:bg-dark-300/30 transition-colors duration-200">
-                  <td className="py-4 px-6">
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(invoice.status)}`}>
-                      {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
-                    </span>
-                  </td>
-                  <td className="py-4 px-6">
-                    <span className="text-secondary font-medium">{invoice.id}</span>
-                  </td>
+          {loadingInvoices ? (
+            <div className="py-12 text-center">
+              <span className="text-dark-500">Loading invoices...</span>
+            </div>
+          ) : errorInvoices ? (
+            <div className="py-12 text-center text-red-400">{errorInvoices}</div>
+          ) : (
+            <table className="w-full">
+              <thead className="bg-dark-300 border-b border-dark-400">
+                <tr>
+                  <th className="text-left py-4 px-6 text-dark-500 font-medium uppercase text-xs tracking-wider">Status</th>
+                  <th className="text-left py-4 px-6 text-dark-500 font-medium uppercase text-xs tracking-wider">Number</th>
                   {currentUser.role !== 'client' && (
-                    <td className="py-4 px-6">
-                      <span className="text-white font-medium">{invoice.client_name}</span>
-                    </td>
+                    <th className="text-left py-4 px-6 text-dark-500 font-medium uppercase text-xs tracking-wider">Client</th>
                   )}
-                  <td className="py-4 px-6">
-                    <span className="text-white font-medium">${invoice.amount.toLocaleString()}</span>
-                  </td>
-                  <td className="py-4 px-6">
-                    {currentUser.role === 'client' ? (
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                        invoice.status === 'paid' 
-                          ? 'bg-green-500/20 text-green-400' 
-                          : 'bg-red-500/20 text-red-400'
-                      }`}>
-                        {invoice.status === 'paid' ? 'Paid' : 'Unpaid'}
-                      </span>
-                    ) : (
-                      <span className={`font-medium ${invoice.balance > 0 ? 'text-red-400' : 'text-green-400'}`}>
-                        ${invoice.balance.toLocaleString()}
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-4 px-6">
-                    <span className="text-dark-500 text-sm">
-                      {new Date(invoice.date_range.start).toLocaleDateString()} - {new Date(invoice.date_range.end).toLocaleDateString()}
-                    </span>
-                  </td>
-                  <td className="py-4 px-6">
-                    <span className="text-dark-500">{new Date(invoice.due_date).toLocaleDateString()}</span>
-                  </td>
-                  <td className="py-4 px-6">
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() => setSelectedInvoice(invoice)}
-                        className="p-2 text-dark-500 hover:text-white hover:bg-dark-400 rounded transition-colors duration-200"
-                        title="View Invoice"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                      {currentUser.role !== 'client' && (
-                        <>
-                          <button
-                            onClick={() => prepareEmailPreview(invoice)}
-                            className="p-2 text-dark-500 hover:text-secondary hover:bg-dark-400 rounded transition-colors duration-200"
-                            title="Send Invoice"
-                          >
-                            <Send className="w-4 h-4" />
-                          </button>
-                          <div className="relative group">
-                            <button className="p-2 text-dark-500 hover:text-white hover:bg-dark-400 rounded transition-colors duration-200">
-                              <MoreHorizontal className="w-4 h-4" />
-                            </button>
-                            <div className="absolute right-0 top-full mt-1 bg-dark-300 border border-dark-400 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 min-w-[120px]">
-                              <button
-                                onClick={() => updateInvoiceStatus(invoice.id, 'paid')}
-                                className="w-full text-left px-3 py-2 text-sm text-white hover:bg-dark-400 transition-colors duration-200 rounded-t-lg"
-                              >
-                                Mark as Paid
-                              </button>
-                              <button
-                                onClick={() => updateInvoiceStatus(invoice.id, 'sent')}
-                                className="w-full text-left px-3 py-2 text-sm text-white hover:bg-dark-400 transition-colors duration-200"
-                              >
-                                Mark as Sent
-                              </button>
-                              <button
-                                onClick={() => updateInvoiceStatus(invoice.id, 'cancelled')}
-                                className="w-full text-left px-3 py-2 text-sm text-white hover:bg-dark-400 transition-colors duration-200"
-                              >
-                                Cancel Invoice
-                              </button>
-                              <button
-                                onClick={() => deleteInvoice(invoice.id)}
-                                className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-dark-400 transition-colors duration-200 rounded-b-lg"
-                              >
-                                Delete
-                              </button>
-                            </div>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </td>
+                  <th className="text-left py-4 px-6 text-dark-500 font-medium uppercase text-xs tracking-wider">Amount</th>
+                  <th className="text-left py-4 px-6 text-dark-500 font-medium uppercase text-xs tracking-wider">
+                    {currentUser.role === 'client' ? 'Payment Status' : 'Balance'}
+                  </th>
+                  <th className="text-left py-4 px-6 text-dark-500 font-medium uppercase text-xs tracking-wider">Period</th>
+                  <th className="text-left py-4 px-6 text-dark-500 font-medium uppercase text-xs tracking-wider">Due Date</th>
+                  <th className="text-left py-4 px-6 text-dark-500 font-medium uppercase text-xs tracking-wider">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-dark-300">
+                {filteredInvoices.map((invoice) => (
+                  <tr key={invoice.id} className="hover:bg-dark-300/30 transition-colors duration-200">
+                    <td className="py-4 px-6">
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(invoice.status)}`}>
+                        {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
+                      </span>
+                    </td>
+                    <td className="py-4 px-6">
+                      <span className="text-secondary font-medium">{invoice.id}</span>
+                    </td>
+                    {currentUser.role !== 'client' && (
+                      <td className="py-4 px-6">
+                        <span className="text-white font-medium">{invoice.client_name}</span>
+                      </td>
+                    )}
+                    <td className="py-4 px-6">
+                      <span className="text-white font-medium">${(invoice.amount ?? 0).toLocaleString()}</span>
+                    </td>
+                    <td className="py-4 px-6">
+                      {currentUser.role === 'client' ? (
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                          invoice.status === 'paid' 
+                            ? 'bg-green-500/20 text-green-400' 
+                            : 'bg-red-500/20 text-red-400'
+                        }`}>
+                          {invoice.status === 'paid' ? 'Paid' : 'Unpaid'}
+                        </span>
+                      ) : (
+                        <span className={`font-medium ${(invoice.balance ?? 0) > 0 ? 'text-red-400' : 'text-green-400'}`}>
+                          ${(invoice.balance ?? 0).toLocaleString()}
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-4 px-6">
+                      <span className="text-dark-500 text-sm">
+                        {(() => {
+                          const start = invoice.date_range?.start;
+                          const end = invoice.date_range?.end;
+                          const startDate = start ? new Date(start) : null;
+                          const endDate = end ? new Date(end) : null;
+                          const validStart = startDate && !isNaN(startDate.getTime());
+                          const validEnd = endDate && !isNaN(endDate.getTime());
+                          if (validStart && validEnd) {
+                            return `${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()}`;
+                          } else if (validStart) {
+                            return `${startDate.toLocaleDateString()} -`;
+                          } else if (validEnd) {
+                            return `- ${endDate.toLocaleDateString()}`;
+                          } else {
+                            return '-';
+                          }
+                        })()}
+                      </span>
+                    </td>
+                    <td className="py-4 px-6">
+                      <span className="text-dark-500">{new Date(invoice.due_date).toLocaleDateString()}</span>
+                    </td>
+                    <td className="py-4 px-6">
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => setSelectedInvoice(invoice)}
+                          className="p-2 text-dark-500 hover:text-white hover:bg-dark-400 rounded transition-colors duration-200"
+                          title="View Invoice"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        {currentUser.role !== 'client' && (
+                          <>
+                            <button
+                              onClick={() => prepareEmailPreview(invoice)}
+                              className="p-2 text-dark-500 hover:text-secondary hover:bg-dark-400 rounded transition-colors duration-200"
+                              title="Send Invoice"
+                            >
+                              <Send className="w-4 h-4" />
+                            </button>
+                            <div className="relative group">
+                              <button className="p-2 text-dark-500 hover:text-white hover:bg-dark-400 rounded transition-colors duration-200">
+                                <MoreHorizontal className="w-4 h-4" />
+                              </button>
+                              <div className="absolute right-0 top-full mt-1 bg-dark-300 border border-dark-400 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 min-w-[120px]">
+                                <button
+                                  onClick={() => updateInvoiceStatus(invoice.id, 'paid')}
+                                  className="w-full text-left px-3 py-2 text-sm text-white hover:bg-dark-400 transition-colors duration-200 rounded-t-lg"
+                                >
+                                  Mark as Paid
+                                </button>
+                                <button
+                                  onClick={() => updateInvoiceStatus(invoice.id, 'sent')}
+                                  className="w-full text-left px-3 py-2 text-sm text-white hover:bg-dark-400 transition-colors duration-200"
+                                >
+                                  Mark as Sent
+                                </button>
+                                <button
+                                  onClick={() => updateInvoiceStatus(invoice.id, 'cancelled')}
+                                  className="w-full text-left px-3 py-2 text-sm text-white hover:bg-dark-400 transition-colors duration-200"
+                                >
+                                  Cancel Invoice
+                                </button>
+                                <button
+                                  onClick={() => deleteInvoice(invoice.id)}
+                                  className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-dark-400 transition-colors duration-200 rounded-b-lg"
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
         
         {filteredInvoices.length === 0 && (
@@ -934,7 +1127,7 @@ This invoice was generated automatically by TeamFlow.`
             className="bg-dark-200 rounded-xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-gray-800">Email Preview - Invoice {selectedInvoice.id}</h3>
+              <h3 className="text-xl font-bold text-white-800">Email Preview - Invoice {selectedInvoice.id}</h3>
               <button
                 onClick={() => setShowEmailPreview(false)}
                 className="text-dark-500 hover:text-white"
@@ -951,34 +1144,10 @@ This invoice was generated automatically by TeamFlow.`
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-dark-500 mb-2">Subject:</label>
-                <input
-                  type="text"
-                  value={emailSubject}
-                  onChange={(e) => setEmailSubject(e.target.value)}
-                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
-                />
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-dark-500 mb-2">Message:</label>
-                <textarea
-                  value={emailBody}
-                  onChange={(e) => setEmailBody(e.target.value)}
-                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
-                  rows={15}
-                />
-              </div>
+              {/* Removed custom subject and message fields since backend uses its own template */}
 
-              <div>
-                <label className="block text-sm font-medium text-dark-500 mb-2">Attachment:</label>
-                <div className="bg-dark-300 rounded-lg px-4 py-2 text-white flex items-center space-x-2">
-                  <FileText className="w-4 h-4 text-secondary" />
-                  <span>Invoice_{selectedInvoice.id}.pdf</span>
-                  <span className="text-dark-500 text-sm">({Math.round(selectedInvoice.amount / 100)}KB)</span>
-                </div>
-              </div>
+              {/* Removed PDF attachment UI since no PDF is actually sent */}
             </div>
 
             <div className="flex justify-end space-x-3 mt-6">
@@ -1010,7 +1179,7 @@ This invoice was generated automatically by TeamFlow.`
             className="bg-dark-200 rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-gray-800">Invoice {selectedInvoice.id}</h3>
+              <h3 className="text-xl font-bold text-white-800">Invoice {selectedInvoice.id}</h3>
               <button
                 onClick={() => setSelectedInvoice(null)}
                 className="text-dark-500 hover:text-white"
@@ -1019,7 +1188,7 @@ This invoice was generated automatically by TeamFlow.`
               </button>
             </div>
 
-            <div className="space-y-6">
+            <div className="space-y-6" ref={invoiceDetailRef}>
               <div className="grid grid-cols-2 gap-6">
                 <div>
                   <h4 className="font-medium text-gray-700 mb-2">Client</h4>
@@ -1037,7 +1206,7 @@ This invoice was generated automatically by TeamFlow.`
                 <div>
                   <h4 className="font-medium text-gray-700 mb-2">Invoice Period</h4>
                   <p className="text-dark-500">
-                    {new Date(selectedInvoice.date_range.start).toLocaleDateString()} - {new Date(selectedInvoice.date_range.end).toLocaleDateString()}
+                    {new Date(selectedInvoice.date_range?.start ?? '').toLocaleDateString()} - {new Date(selectedInvoice.date_range?.end ?? '').toLocaleDateString()}
                   </p>
                 </div>
                 <div>
@@ -1080,7 +1249,10 @@ This invoice was generated automatically by TeamFlow.`
             </div>
 
             <div className="flex justify-end space-x-3 mt-6">
-              <button className="flex items-center space-x-2 bg-dark-300 hover:bg-dark-400 text-white px-4 py-2 rounded-lg transition-colors duration-200">
+              <button
+                onClick={handleDownloadPDF}
+                className="flex items-center space-x-2 bg-dark-300 hover:bg-dark-400 text-white px-4 py-2 rounded-lg transition-colors duration-200"
+              >
                 <Download className="w-4 h-4" />
                 <span>Download PDF</span>
               </button>

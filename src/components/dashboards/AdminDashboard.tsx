@@ -1,3 +1,5 @@
+import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAppContext } from '../../context/AppContext'
 import { 
@@ -13,6 +15,7 @@ import {
 } from 'lucide-react'
 
 const AdminDashboard = () => {
+  const navigate = useNavigate()
   const { 
     timeEntries, 
     tasks, 
@@ -21,29 +24,75 @@ const AdminDashboard = () => {
     currentUser 
   } = useAppContext()
 
+  // --- Total Users (from user management) ---
+  // We'll fetch users from the AdminService like UserManagement.tsx
+  const [users, setUsers] = useState<any[]>([])
+  useEffect(() => {
+    (async () => {
+      try {
+        const usersData = await import('../../lib/adminService').then(m => m.AdminService.getAllUsers())
+        setUsers(usersData)
+      } catch (e) {
+        setUsers([])
+      }
+    })()
+  }, [])
+
+  // --- Active Projects (from Projects.tsx) ---
+  const activeProjects = projects.filter(p => p.status === 'active' && !p.archived)
+
+  // --- Total Revenue & Total Hours (from Clients.tsx) ---
+  // Helper: getClientTotalHours
+  const getClientTotalHours = (clientId: string) => {
+    const clientProjects = projects.filter(p => p.client_id === clientId && !p.archived)
+    const projectIds = clientProjects.map(p => p.id)
+    const totalMinutes = timeEntries
+      .filter(entry => projectIds.includes(entry.project_id || ''))
+      .reduce((sum, entry) => sum + (entry.duration || entry.duration_minutes || 0), 0)
+    return totalMinutes / 60
+  }
+
+  // Helper: getClientTotalRevenue
+  const getClientTotalRevenue = (clientId: string) => {
+    const clientProjects = projects.filter(p => p.client_id === clientId && !p.archived)
+    const projectIds = clientProjects.map(p => p.id)
+    return timeEntries
+      .filter(entry => projectIds.includes(entry.project_id || ''))
+      .reduce((sum, entry) => {
+        const durationInHours = (entry.duration || entry.duration_minutes || 0) / 60
+        const hourlyRate = entry.user_profile?.hourly_rate || 0
+        return sum + (durationInHours * hourlyRate)
+      }, 0)
+  }
+
+  // Calculate totals
+  const totalUsers = users.length
+  const totalRevenue = clients.reduce((sum, client) => sum + getClientTotalRevenue(client.id), 0)
+  const totalHours = clients.reduce((sum, client) => sum + getClientTotalHours(client.id), 0)
+
   // Admin-specific stats
   const adminStats = [
     {
       label: 'Total Users',
-      value: '12', // This would come from user management
+      value: totalUsers.toString(),
       icon: Users,
       color: 'text-blue-500'
     },
     {
       label: 'Active Projects',
-      value: projects.filter(p => p.status === 'active' && !p.archived).length.toString(),
+      value: activeProjects.length.toString(),
       icon: FileText,
       color: 'text-green-500'
     },
     {
       label: 'Total Revenue',
-      value: '$125,000', // Placeholder - will be calculated from invoices
+      value: `$${totalRevenue.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
       icon: DollarSign,
       color: 'text-purple-500'
     },
     {
       label: 'Total Hours',
-      value: `${timeEntries.reduce((sum, entry) => sum + (entry.duration_minutes || 0), 0) / 60}h`,
+      value: `${totalHours.toFixed(1)}h`,
       icon: Clock,
       color: 'text-orange-500'
     }
@@ -110,66 +159,24 @@ const AdminDashboard = () => {
       <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
         <h2 className="text-lg font-semibold mb-4">Quick Actions</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <button className="flex items-center space-x-3 p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
+          <button
+            className="flex items-center space-x-3 p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+            onClick={() => navigate('/dashboard/users')}
+          >
             <Users className="w-5 h-5 text-blue-600" />
             <span className="font-medium text-blue-900">Manage Users</span>
           </button>
-          <button className="flex items-center space-x-3 p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors">
+          <button
+            className="flex items-center space-x-3 p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors"
+            onClick={() => navigate('/dashboard/reports')}
+          >
             <BarChart3 className="w-5 h-5 text-green-600" />
             <span className="font-medium text-green-900">View Reports</span>
           </button>
-          <button className="flex items-center space-x-3 p-4 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors">
-            <Settings className="w-5 h-5 text-purple-600" />
-            <span className="font-medium text-purple-900">System Settings</span>
-          </button>
         </div>
       </div>
 
-      {/* System Health & Recent Activities */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* System Health */}
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-          <h2 className="text-lg font-semibold mb-4">System Health</h2>
-          <div className="space-y-3">
-            {systemHealth.map((system) => (
-              <div key={system.name} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <span className="font-medium">{system.name}</span>
-                <div className="flex items-center space-x-2">
-                  {system.status === 'healthy' ? (
-                    <CheckCircle className={`w-4 h-4 ${system.color}`} />
-                  ) : (
-                    <AlertCircle className={`w-4 h-4 ${system.color}`} />
-                  )}
-                  <span className={`text-sm font-medium ${system.color} capitalize`}>
-                    {system.status}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Recent Activities */}
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-          <h2 className="text-lg font-semibold mb-4">Recent Activities</h2>
-          <div className="space-y-3">
-            {recentActivities.map((activity, index) => (
-              <div key={index} className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg">
-                <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-900">{activity.message}</p>
-                  <div className="flex items-center space-x-2 mt-1">
-                    <span className="text-xs text-gray-500">{activity.type}</span>
-                    <span className="text-xs text-gray-400">•</span>
-                    <span className="text-xs text-gray-500">{activity.time}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
+      
       {/* Company Overview */}
       <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
         <h2 className="text-lg font-semibold mb-4">Company Overview</h2>

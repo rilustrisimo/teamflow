@@ -139,7 +139,7 @@ export const useRoleBasedNavigation = () => {
       description: currentUser.role === 'client' ? 'View your invoices' : 'Manage invoices'
     })
   }
-  
+  /*
   // Financial Dashboard - Admin and Manager only
   if (permissions.canAccessFinancialData) {
     items.push({
@@ -161,7 +161,7 @@ export const useRoleBasedNavigation = () => {
       description: 'System settings and configuration'
     })
   }
-  
+  */
   return items
 }
 

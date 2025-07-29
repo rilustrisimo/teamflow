@@ -20,7 +20,11 @@ const Clients = () => {
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (activeDropdown && !(event.target as Element).closest('.dropdown-trigger')) {
+      if (
+        activeDropdown &&
+        !(event.target as Element).closest('.dropdown-trigger') &&
+        !(event.target as Element).closest('.dropdown-menu')
+      ) {
         setActiveDropdown(null)
       }
     }
@@ -120,6 +124,7 @@ const Clients = () => {
   }
 
   const handleDeleteClient = async (clientId: string) => {
+    console.log('Deleting client:', clientId)
     if (confirm('Are you sure you want to delete this client?')) {
       try {
         await deleteClient(clientId)
@@ -521,7 +526,7 @@ const Clients = () => {
       {/* Portal-based dropdown menu */}
       {activeDropdown && createPortal(
         <div 
-          className="fixed bg-dark-300 border border-dark-400 rounded-lg shadow-lg z-[10000] min-w-[120px]"
+          className="dropdown-menu fixed bg-dark-300 border border-dark-400 rounded-lg shadow-lg z-[10000] min-w-[120px]"
           style={{
             top: `${dropdownPosition.top}px`,
             right: `${dropdownPosition.right}px`

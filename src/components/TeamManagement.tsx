@@ -244,7 +244,7 @@ const TeamManagement = () => {
             className="bg-dark-200 rounded-xl p-6 max-w-md w-full"
           >
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-gray-800">Invite Team Member</h3>
+              <h3 className="text-xl font-bold text-white-800">Invite Team Member</h3>
               <button
                 onClick={() => setShowInviteModal(false)}
                 className="text-dark-500 hover:text-white"

@@ -1,18 +1,13 @@
 import { motion } from 'framer-motion'
 import { useAppContext } from '../../context/AppContext'
-import { 
-  Clock, 
-  CheckSquare, 
-  FileText, 
-  Play,
-  Pause,
-  Target,
-  TrendingUp,
-  Calendar,
-  User
-} from 'lucide-react'
+import { Clock, CheckSquare, FileText, Play, Pause, Target, TrendingUp, Calendar, User, Loader2 } from 'lucide-react'
+import { useState, useEffect } from 'react'
+
+import { useNavigate } from 'react-router-dom'
 
 const TeamMemberDashboard = () => {
+  const [pendingStartTask, setPendingStartTask] = useState<string | null>(null)
+  const navigate = useNavigate()
   const { 
     timeEntries, 
     tasks, 
@@ -20,8 +15,28 @@ const TeamMemberDashboard = () => {
     currentUser,
     timer,
     startTimer,
-    stopTimer
+    stopTimer,
+    setTimer,
+    loading
   } = useAppContext()
+
+  // Start timer after context is set
+  useEffect(() => {
+    if (pendingStartTask) {
+      startTimer()
+      setPendingStartTask(null)
+    }
+  }, [timer.selectedTask, timer.selectedProject, timer.selectedClient, pendingStartTask])
+  // Show loader while loading data
+  if (typeof loading !== 'undefined' && loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh]">
+        <Loader2 className="w-10 h-10 animate-spin text-blue-600 mb-4" />
+        <span className="text-gray-500 text-lg">Loading your dashboard...</span>
+      </div>
+    )
+  }
+
 
   // Filter data for current user (excluding archived)
   const myTimeEntries = timeEntries.filter(entry => entry.user_id === currentUser?.id)
@@ -31,22 +46,48 @@ const TeamMemberDashboard = () => {
     tasks.some(task => task.project_id === project.id && task.assigned_to === currentUser?.id && !task.archived)
   )
 
-  // Calculate personal stats
-  const todayEntries = myTimeEntries.filter(entry => {
-    const today = new Date().toISOString().split('T')[0]
-    return entry.start_time.split('T')[0] === today
-  })
+  // Calculate personal stats using 'date' and 'duration' fields
+  // Today's hours
+  const today = new Date()
+  const todayStr = today.toISOString().split('T')[0]
+  const todayEntries = myTimeEntries.filter(entry => entry.date === todayStr)
+  const todayHours = todayEntries.reduce((sum, entry) => sum + (entry.duration || 0), 0)
 
-  const todayHours = todayEntries.reduce((sum, entry) => sum + (entry.duration_minutes || 0), 0) / 60
-  const weeklyHours = myTimeEntries.reduce((sum, entry) => sum + (entry.duration_minutes || 0), 0) / 60
+  // Weekly hours (current week, Sunday-Saturday)
+  // Start week on Sunday, use UTC for ISO date strings
+  const getStartOfWeek = (date: Date) => {
+    const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()))
+    const day = d.getUTCDay() // Sunday = 0
+    d.setUTCDate(d.getUTCDate() - day)
+    d.setUTCHours(0, 0, 0, 0)
+    return d
+  }
+  const startOfWeek = getStartOfWeek(today)
+  const endOfWeek = new Date(startOfWeek)
+  endOfWeek.setUTCDate(startOfWeek.getUTCDate() + 6)
+  endOfWeek.setUTCHours(23, 59, 59, 999)
+  const weeklyEntries = myTimeEntries.filter(entry => {
+    if (!entry.date) return false
+    // Parse entry.date as UTC midnight
+    const [year, month, day] = entry.date.split('-').map(Number)
+    const entryDate = new Date(Date.UTC(year, month - 1, day))
+    return entryDate >= startOfWeek && entryDate <= endOfWeek
+  })
+  const weeklyHours = weeklyEntries.reduce((sum, entry) => sum + (entry.duration || 0), 0)
+
+  // Convert durations from minutes to hours for display
+  const todayHoursDisplay = (todayHours / 60).toFixed(2)
+  const weeklyHoursDisplay = (weeklyHours / 60).toFixed(2)
+
+  // Completed and active tasks
   const completedTasks = myTasks.filter(task => task.status === 'done').length
-  const activeTasks = myTasks.filter(task => task.status === 'inprogress').length
+  const activeTasks = myTasks.filter(task => task.status !== 'done').length
 
   // Personal stats
   const personalStats = [
     {
-      label: 'Today\'s Hours',
-      value: `${todayHours.toFixed(1)}h`,
+      label: "Today's Hours",
+      value: `${todayHoursDisplay}h`,
       icon: Clock,
       color: 'text-blue-500'
     },
@@ -64,7 +105,7 @@ const TeamMemberDashboard = () => {
     },
     {
       label: 'Weekly Hours',
-      value: `${weeklyHours.toFixed(1)}h`,
+      value: `${weeklyHoursDisplay}h`,
       icon: TrendingUp,
       color: 'text-purple-500'
     }
@@ -74,6 +115,8 @@ const TeamMemberDashboard = () => {
   const todaysTasks = myTasks
     .filter(task => task.status !== 'done')
     .slice(0, 5)
+
+  console.log('Tasks:', myTasks)
 
   // Current timer info
   const currentTask = timer.selectedTask ? tasks.find(t => t.id === timer.selectedTask) : null
@@ -185,7 +228,15 @@ const TeamMemberDashboard = () => {
                     }`}></div>
                     <div>
                       <p className="font-medium text-gray-900">{task.title}</p>
-                      <p className="text-sm text-gray-500">{task.project?.name || 'No project'}</p>
+                      <p className="text-sm text-gray-500">
+                        {
+                          (() => {
+                            const project = projects.find(p => p.id === task.project_id)
+                            const projectName = project ? project.name : 'No project'
+                            return `${projectName} • ${task.status.charAt(0).toUpperCase() + task.status.slice(1)}`
+                          })()
+                        }
+                      </p>
                     </div>
                   </div>
                   <div className="flex items-center space-x-2">
@@ -197,7 +248,22 @@ const TeamMemberDashboard = () => {
                       {task.priority}
                     </span>
                     <button 
-                      onClick={() => startTimer()}
+                      onClick={() => {
+                        // Find project and client for this task
+                        const project = projects.find(p => p.id === task.project_id)
+                        const clientId = project?.client_id || ''
+                        // Set timer context with selected task, project, client, and description
+                        setTimer({
+                          selectedTask: task.id,
+                          selectedProject: task.project_id,
+                          selectedClient: clientId,
+                          description: task.title || '',
+                          isTracking: false,
+                          startTime: null,
+                          currentTime: 0
+                        })
+                        setPendingStartTask(task.id)
+                      }}
                       className="p-1 text-gray-400 hover:text-blue-500 transition-colors"
                     >
                       <Play className="w-4 h-4" />
@@ -213,15 +279,24 @@ const TeamMemberDashboard = () => {
         <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
           <h2 className="text-lg font-semibold mb-4">Quick Actions</h2>
           <div className="space-y-3">
-            <button className="w-full flex items-center space-x-3 p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
+            <button
+              className="w-full flex items-center space-x-3 p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+              onClick={() => navigate('/dashboard/timetracker')}
+            >
               <Play className="w-5 h-5 text-blue-600" />
               <span className="font-medium text-blue-900">Start New Timer</span>
             </button>
-            <button className="w-full flex items-center space-x-3 p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors">
+            <button
+              className="w-full flex items-center space-x-3 p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors"
+              onClick={() => navigate('/dashboard/reports')}
+            >
               <FileText className="w-5 h-5 text-green-600" />
               <span className="font-medium text-green-900">View My Reports</span>
             </button>
-            <button className="w-full flex items-center space-x-3 p-4 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors">
+            <button
+              className="w-full flex items-center space-x-3 p-4 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors"
+              onClick={() => navigate('/dashboard/tasks')}
+            >
               <CheckSquare className="w-5 h-5 text-purple-600" />
               <span className="font-medium text-purple-900">My Task Board</span>
             </button>

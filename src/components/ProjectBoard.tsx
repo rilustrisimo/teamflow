@@ -679,7 +679,7 @@ const ProjectBoard = () => {
             animate={{ opacity: 1, scale: 1 }}
             className="bg-dark-200 rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
           >
-            <h3 className="text-xl font-bold text-gray-800 mb-6">Create New Task</h3>
+            <h3 className="text-xl font-bold text-white-800 mb-6">Create New Task</h3>
 
             <div className="space-y-4">
               <div>
@@ -829,7 +829,7 @@ const ProjectBoard = () => {
             className="bg-dark-200 rounded-xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-gray-800">{selectedTask.title}</h3>
+              <h3 className="text-xl font-bold text-white-800">{selectedTask.title}</h3>
               <button
                 onClick={() => setSelectedTask(null)}
                 className="text-dark-500 hover:text-white"
@@ -1046,7 +1046,7 @@ const ProjectBoard = () => {
             animate={{ opacity: 1, scale: 1 }}
             className="bg-dark-200 rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
           >
-            <h3 className="text-xl font-bold text-gray-800 mb-6">Create New Project</h3>
+            <h3 className="text-xl font-bold text-white-800 mb-6">Create New Project</h3>
 
             <div className="space-y-4">
               <div>
