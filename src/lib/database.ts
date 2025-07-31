@@ -353,7 +353,7 @@ export class DatabaseService {
     const { data: currentProfile, error: profileError } = await supabase
       .from('profiles')
       .select('id, company_id, full_name, role')
-      .eq('id', userId) // profiles.id is the same as auth.users.id
+      .eq('user_id', userId) // profiles.user_id is the same as auth.users.id
       .single()
     
     console.log('Profile lookup result:', { currentProfile, profileError })
