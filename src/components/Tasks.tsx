@@ -204,6 +204,8 @@ const Tasks = () => {
     currentUser,
     loading
   } = useAppContext()
+  // Add addTask from context if available
+  const { addTask } = useAppContext()
 
   const [filter, setFilter] = useState('all')
   const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null)
@@ -421,8 +423,23 @@ const Tasks = () => {
         })
         setNotification({ type: 'success', message: 'Task updated successfully!' })
       } else {
-        // Note: Create new task functionality would go here if addTask function is available
-        setNotification({ type: 'error', message: 'Create task functionality not yet implemented' })
+        // Create new task
+        if (typeof addTask === 'function') {
+          await addTask({
+            title: newTask.title,
+            description: newTask.description,
+            due_date: newTask.due_date || null,
+            assigned_to: newTask.assigned_to || null,
+            project_id: newTask.project_id || null,
+            deliverable_link: newTask.deliverable_link || null,
+            video_link: newTask.video_link || null,
+            priority: newTask.priority,
+            status: newTask.status
+          })
+          setNotification({ type: 'success', message: 'Task created successfully!' })
+        } else {
+          setNotification({ type: 'error', message: 'Create task functionality not available' })
+        }
       }
 
       // Reset form and close modal
