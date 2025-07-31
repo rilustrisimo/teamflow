@@ -393,6 +393,7 @@ const TaskBoard = () => {
   const [showNewTaskModal, setShowNewTaskModal] = useState(false)
   const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null)
   const [activeTask, setActiveTask] = useState<any>(null)
+  const [movingTaskId, setMovingTaskId] = useState<string | null>(null)
 
   // Enhanced TaskBoard features
   const [searchQuery, setSearchQuery] = useState('')
@@ -581,109 +582,107 @@ const TaskBoard = () => {
   }
 
   const handleDragEnd = async (event: DragEndEvent) => {
-    const { active, over } = event
-    setActiveTask(null)
+    const { active, over } = event;
+    setActiveTask(null);
 
     // If there's no drop target, the task will automatically return to its original position
     if (!over) {
-      console.log('Task dropped outside valid drop zone - returning to original position')
-      return
+      console.log('Task dropped outside valid drop zone - returning to original position');
+      return;
     }
 
-    const taskId = active.id as string
-    
+    const taskId = active.id as string;
     // Find the task being moved
-    const task = tasks.find(t => t.id === taskId)
+    const task = tasks.find((t: any) => t.id === taskId);
     if (!task) {
-      console.error('Task not found')
-      return
+      console.error('Task not found');
+      return;
     }
-    
     // Check if user has permission to move this task
     if (!canMoveTask(task)) {
-      console.log('User does not have permission to move this task')
+      console.log('User does not have permission to move this task');
       setNotification({ 
         type: 'error', 
         message: 'You can only move your own tasks.' 
-      })
-      return
+      });
+      return;
     }
 
-    let newStatus = over.id as string
-    
+    let newStatus = over.id as string;
     // Handle different drop zone types
     if (!['todo', 'inprogress', 'review', 'done'].includes(newStatus)) {
       // Check if dropped on another task
-      const targetTask = tasks.find(t => t.id === newStatus)
+      const targetTask = tasks.find((t: any) => t.id === newStatus);
       if (targetTask) {
-        newStatus = targetTask.status
+        newStatus = targetTask.status;
       } 
       // Handle special drop zones (top, bottom, between)
       else if (newStatus.includes('-top') || newStatus.includes('-bottom') || newStatus.includes('-between-')) {
         const statusMatch = newStatus.match(/^(todo|inprogress|review|done)/);
         if (statusMatch) {
-          newStatus = statusMatch[1]
+          newStatus = statusMatch[1];
         } else {
-          console.log(`Invalid drop zone format: ${newStatus}`)
+          console.log(`Invalid drop zone format: ${newStatus}`);
           setNotification({ 
             type: 'error', 
             message: 'Invalid drop target. Task returned to original position.' 
-          })
-          return
+          });
+          return;
         }
       }
       // Handle column drop zones
       else if (newStatus.startsWith('column-')) {
-        newStatus = newStatus.replace('column-', '')
+        newStatus = newStatus.replace('column-', '');
       } 
       // Handle tasks container drop zones
       else if (newStatus.startsWith('tasks-')) {
-        newStatus = newStatus.replace('tasks-', '')
+        newStatus = newStatus.replace('tasks-', '');
       } 
       else {
-        console.log(`Unrecognized drop target: ${newStatus} - returning task to original position`)
+        console.log(`Unrecognized drop target: ${newStatus} - returning task to original position`);
         setNotification({ 
           type: 'error', 
           message: 'Invalid drop target. Task returned to original position.' 
-        })
-        return
+        });
+        return;
       }
     }
-    
     // Validate that the determined status is valid
-    const validStatuses = ['todo', 'inprogress', 'review', 'done']
+    const validStatuses = ['todo', 'inprogress', 'review', 'done'];
     if (!validStatuses.includes(newStatus)) {
-      console.log(`Invalid status determined: ${newStatus} - returning task to original position`)
+      console.log(`Invalid status determined: ${newStatus} - returning task to original position`);
       setNotification({ 
         type: 'error', 
         message: 'Invalid drop target. Task returned to original position.' 
-      })
-      return
+      });
+      return;
     }
-    
     // If the task is already in the target status, no need to update
     if (task.status === newStatus) {
-      console.log('Task already in target status')
-      return
+      console.log('Task already in target status');
+      return;
     }
 
+    // Show loader while moving task
+    setMovingTaskId(taskId);
     try {
-      await updateTask(taskId, { status: newStatus })
+      await updateTask(taskId, { status: newStatus });
       const statusDisplayName = newStatus === 'inprogress' ? 'In Progress' : 
-        newStatus.charAt(0).toUpperCase() + newStatus.slice(1)
+        newStatus.charAt(0).toUpperCase() + newStatus.slice(1);
       setNotification({ 
         type: 'success', 
         message: `Task moved to ${statusDisplayName}!` 
-      })
+      });
     } catch (error) {
-      console.error('Error updating task status:', error)
+      console.error('Error updating task status:', error);
       setNotification({ 
         type: 'error', 
         message: 'Failed to move task. Task returned to original position.' 
-      })
+      });
       // Note: The task will automatically return to its original position 
       // since the state wasn't updated due to the error
     }
+    setMovingTaskId(null);
   }
 
   const handleTaskView = (task: any) => {
@@ -810,6 +809,15 @@ const TaskBoard = () => {
 
   return (
     <div className="p-6 bg-gray-100 min-h-screen">
+      {/* Loader overlay for moving task */}
+      {movingTaskId && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-[100]">
+          <div className="flex flex-col items-center space-y-4 bg-white rounded-lg p-8 shadow-lg">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+            <p className="text-gray-700 font-medium">Moving task...</p>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <div>
