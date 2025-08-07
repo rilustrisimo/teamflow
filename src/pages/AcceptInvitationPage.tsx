@@ -93,7 +93,14 @@ const AcceptInvitationPage = () => {
       setError(null)
 
       // Sign up the user
-      const { error: authError } = await supabase.auth.signUp({
+      console.log('Signing up user with invitation data:', {
+        email: invitation.email,
+        full_name: invitation.full_name,
+        role: invitation.role,
+        company_id: invitation.company_id
+      })
+      
+      const { error: authError, data: authData } = await supabase.auth.signUp({
         email: invitation.email,
         password: formData.password,
         options: {
@@ -106,8 +113,11 @@ const AcceptInvitationPage = () => {
       })
 
       if (authError) {
+        console.error('Auth signup error:', authError)
         throw authError
       }
+      
+      console.log('User signup successful:', authData.user?.id)
 
       // Update invitation status
       await DatabaseService.updateInvitation(invitation.id, {
@@ -119,7 +129,17 @@ const AcceptInvitationPage = () => {
       navigate('/dashboard')
     } catch (err: any) {
       console.error('Error accepting invitation:', err)
-      setError(err.message || 'Failed to accept invitation. Please try again.')
+      
+      // Handle specific error cases
+      if (err.message?.includes('Cannot determine company')) {
+        setError('There was an issue with your invitation. Please contact your administrator or try again.')
+      } else if (err.message?.includes('User already registered')) {
+        setError('An account with this email already exists. Please try signing in instead.')
+      } else if (err.message?.includes('Database error saving new user')) {
+        setError('There was a database error creating your account. Please try again or contact support.')
+      } else {
+        setError(err.message || 'Failed to accept invitation. Please try again.')
+      }
     } finally {
       setLoading(false)
     }
