@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAppContext } from '../context/AppContext'
-import { Play, Calendar, Download, Edit, Save, X, Plus, Loader2, Clock, Trash2, Pause, RotateCcw, Timer, FileText, FileSpreadsheet, ChevronDown } from 'lucide-react'
+import { Play, Calendar, Download, Edit, Save, X, Plus, Loader2, Clock, Trash2, RotateCcw, Timer, FileText, FileSpreadsheet, ChevronDown } from 'lucide-react'
 import jsPDF from 'jspdf'
 import Papa from 'papaparse'
 
@@ -22,6 +22,11 @@ const TimeTracker = () => {
     loading,
     currentUser
   } = useAppContext()
+
+  // FIXED: Helper function to get local date string (YYYY-MM-DD) to prevent timezone issues
+  const getLocalDateString = (date: Date = new Date()): string => {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+  }
 
   // Filter time entries to only show current user's entries
   const userTimeEntries = useMemo(() => {
@@ -50,9 +55,9 @@ const TimeTracker = () => {
     projectId: '',
     clientId: '',
     taskId: '',
-    startDate: new Date().toISOString().split('T')[0],
+    startDate: getLocalDateString(),
     startTime: '',
-    endDate: new Date().toISOString().split('T')[0],
+    endDate: getLocalDateString(),
     endTime: '',
     description: ''
   })
@@ -326,24 +331,13 @@ const TimeTracker = () => {
   }
 
   const handleStartStop = () => {
-    if (timer.isTracking) {
-      // Pause timer (don't save yet)
-      setTimer({ isTracking: false })
-    } else {
-      // Start or resume timer
-      if (!timer.selectedProject || !timer.selectedClient) {
-        alert('Please select a client and project before starting the timer')
-        return
-      }
-      
-      if (timer.startTime && timer.currentTime > 0) {
-        // Resume existing timer
-        setTimer({ isTracking: true })
-      } else {
-        // Start new timer
-        startTimer()
-      }
+    // Start new timer (no pause functionality)
+    if (!timer.selectedProject || !timer.selectedClient) {
+      alert('Please select a client and project before starting the timer')
+      return
     }
+    
+    startTimer()
   }
 
   const handleStopTimer = () => {
@@ -396,9 +390,9 @@ const TimeTracker = () => {
       return
     }
 
-    // Determine which date to use for the entry
-    // For cross-day entries, we'll use the start date
-    const entryDate = start.toISOString().split('T')[0]
+    // FIXED: Use local date instead of UTC to prevent timezone date shifts
+    // For cross-day entries, we'll use the start date (in local timezone)
+    const entryDate = manualEntry.startDate // Use the actual date input by user
 
     try {
       await addTimeEntry({
@@ -415,9 +409,9 @@ const TimeTracker = () => {
         projectId: '',
         clientId: '',
         taskId: '',
-        startDate: new Date().toISOString().split('T')[0],
+        startDate: getLocalDateString(),
         startTime: '',
-        endDate: new Date().toISOString().split('T')[0],
+        endDate: getLocalDateString(),
         endTime: '',
         description: ''
       })
@@ -436,7 +430,7 @@ const TimeTracker = () => {
 
       let updateData: any = { [field]: value }
 
-      // If updating start_time or end_time, recalculate duration and potentially update date
+      // FIXED: Use local date instead of UTC to prevent timezone date shifts
       if (field === 'start_time' || field === 'end_time') {
         const startTime = field === 'start_time' ? value : currentEntry.start_time
         const endTime = field === 'end_time' ? value : currentEntry.end_time
@@ -447,8 +441,9 @@ const TimeTracker = () => {
           // Store precise duration - database now supports DECIMAL(10,6)
           updateData.duration = newDuration
           
-          // Update the entry date to the start date (for consistency with cross-day logic)
-          const entryDate = new Date(startTime).toISOString().split('T')[0]
+          // Update the entry date to the start date (using local timezone, not UTC)
+          const startDate = new Date(startTime)
+          const entryDate = getLocalDateString(startDate)
           updateData.date = entryDate
           
           console.log('Updating entry with precise duration and date:', {
@@ -528,6 +523,22 @@ const TimeTracker = () => {
       }
     }
   }, [userTimeEntries, loading, updateTimeEntry])
+
+  // Update display timer to show real elapsed time when tracking
+  useEffect(() => {
+    let interval: NodeJS.Timeout
+    
+    if (timer.isTracking && timer.startTime) {
+      interval = setInterval(() => {
+        // This will trigger re-render to update the display time
+        setTimer({ currentTime: Math.floor((new Date().getTime() - timer.startTime!.getTime()) / 1000) })
+      }, 1000)
+    }
+    
+    return () => {
+      if (interval) clearInterval(interval)
+    }
+  }, [timer.isTracking, timer.startTime, setTimer])
 
   return (
     <div className="p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-6">
@@ -617,7 +628,10 @@ const TimeTracker = () => {
               <div className={`text-5xl sm:text-6xl lg:text-8xl font-mono font-bold mb-4 transition-colors duration-300 ${
                 timer.isTracking ? 'text-emerald-600' : timer.currentTime > 0 ? 'text-blue-600' : 'text-gray-500'
               }`}>
-                {formatTime(timer.currentTime)}
+                {timer.isTracking && timer.startTime 
+                  ? formatTime(Math.floor((new Date().getTime() - timer.startTime.getTime()) / 1000))
+                  : formatTime(timer.currentTime)
+                }
               </div>
               {timer.isTracking && (
                 <motion.div 
@@ -631,39 +645,21 @@ const TimeTracker = () => {
             <div className="flex flex-col sm:flex-row items-center justify-center space-y-3 sm:space-y-0 sm:space-x-4 mb-6">
               <button
                 onClick={handleStartStop}
-                disabled={!timer.selectedProject || !timer.selectedClient}
+                disabled={!timer.selectedProject || !timer.selectedClient || timer.isTracking}
                 className={`w-full sm:w-auto flex items-center justify-center space-x-2 lg:space-x-3 px-6 lg:px-8 py-3 lg:py-4 rounded-xl lg:rounded-2xl font-bold text-base lg:text-lg transition-all duration-300 transform hover:scale-105 shadow-lg ${
-                  timer.isTracking
-                    ? 'bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white shadow-orange-200'
-                    : (!timer.selectedProject || !timer.selectedClient)
-                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed shadow-none'
-                      : timer.currentTime > 0
-                        ? 'bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white shadow-blue-200'
-                        : 'bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-600 hover:to-green-600 text-white shadow-emerald-200'
+                  (!timer.selectedProject || !timer.selectedClient || timer.isTracking)
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed shadow-none'
+                    : 'bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-600 hover:to-green-600 text-white shadow-emerald-200'
                 }`}
               >
-                {timer.isTracking ? (
-                  <>
-                    <Pause className="w-5 h-5 lg:w-6 lg:h-6" />
-                    <span>Pause</span>
-                  </>
-                ) : timer.currentTime > 0 ? (
-                  <>
-                    <Play className="w-5 h-5 lg:w-6 lg:h-6" />
-                    <span>Resume</span>
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-5 h-5 lg:w-6 lg:h-6" />
-                    <span>Start</span>
-                  </>
-                )}
+                <Play className="w-5 h-5 lg:w-6 lg:h-6" />
+                <span>Start</span>
               </button>
               
-              {timer.currentTime > 0 && (
+              {timer.isTracking && (
                 <button
                   onClick={handleStopTimer}
-                  className="w-full sm:w-auto flex items-center justify-center space-x-2 lg:space-x-3 px-6 lg:px-8 py-3 lg:py-4 rounded-xl lg:rounded-2xl font-bold text-base lg:text-lg transition-all duration-300 transform hover:scale-105 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white shadow-lg shadow-green-200"
+                  className="w-full sm:w-auto flex items-center justify-center space-x-2 lg:space-x-3 px-6 lg:px-8 py-3 lg:py-4 rounded-xl lg:rounded-2xl font-bold text-base lg:text-lg transition-all duration-300 transform hover:scale-105 bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 text-white shadow-lg shadow-red-200"
                 >
                   <Save className="w-5 h-5 lg:w-6 lg:h-6" />
                   <span>Stop & Save</span>
@@ -679,18 +675,6 @@ const TimeTracker = () => {
               >
                 <p className="text-sm text-red-700 font-semibold">
                   ⚠️ Please select client and project to start tracking
-                </p>
-              </motion.div>
-            )}
-            
-            {!timer.isTracking && timer.currentTime > 0 && (
-              <motion.div 
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4"
-              >
-                <p className="text-sm text-blue-800 font-semibold">
-                  ⏸️ Timer paused - Click Resume to continue or Stop & Save to finish
                 </p>
               </motion.div>
             )}
@@ -758,45 +742,25 @@ const TimeTracker = () => {
         </div>
 
         {/* Current tracking info */}
-        {(timer.isTracking || timer.currentTime > 0) && (
+        {timer.isTracking && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className={`mt-6 lg:mt-8 p-4 lg:p-6 rounded-xl lg:rounded-2xl border-2 shadow-lg ${
-              timer.isTracking 
-                ? 'bg-gradient-to-br from-emerald-50 via-green-50 to-emerald-100 border-emerald-300' 
-                : 'bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-100 border-blue-300'
-            }`}
+            className="mt-6 lg:mt-8 p-4 lg:p-6 rounded-xl lg:rounded-2xl border-2 shadow-lg bg-gradient-to-br from-emerald-50 via-green-50 to-emerald-100 border-emerald-300"
           >
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 lg:mb-6">
-              <div className={`flex items-center space-x-3 lg:space-x-4 ${
-                timer.isTracking ? 'text-emerald-800' : 'text-blue-800'
-              }`}>
-                <div className={`p-2 lg:p-3 rounded-lg lg:rounded-xl shadow-sm ${
-                  timer.isTracking ? 'bg-emerald-200' : 'bg-blue-200'
-                }`}>
+              <div className="flex items-center space-x-3 lg:space-x-4 text-emerald-800">
+                <div className="p-2 lg:p-3 rounded-lg lg:rounded-xl shadow-sm bg-emerald-200">
                   <Clock className="w-5 h-5 lg:w-6 lg:h-6" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-lg lg:text-xl">
-                    {timer.isTracking ? 'Currently Tracking' : 'Timer Paused'}
-                  </h3>
-                  <p className="text-sm lg:text-base font-medium opacity-80">
-                    {timer.isTracking ? 'Active session in progress' : 'Ready to resume'}
-                  </p>
+                  <h3 className="font-bold text-lg lg:text-xl">Currently Tracking</h3>
+                  <p className="text-sm lg:text-base font-medium opacity-80">Active session in progress</p>
                 </div>
               </div>
-              <div className={`flex items-center space-x-2 lg:space-x-3 px-3 lg:px-4 py-1.5 lg:py-2 rounded-full text-sm font-bold shadow-sm ${
-                timer.isTracking 
-                  ? 'text-emerald-800 bg-emerald-200 border-2 border-emerald-300' 
-                  : 'text-blue-800 bg-blue-200 border-2 border-blue-300'
-              }`}>
-                <span className={`w-2.5 h-2.5 lg:w-3 lg:h-3 rounded-full ${
-                  timer.isTracking 
-                    ? 'bg-emerald-600 animate-pulse' 
-                    : 'bg-blue-600'
-                }`}></span>
-                <span className="text-sm lg:text-base">{timer.isTracking ? 'LIVE' : 'PAUSED'}</span>
+              <div className="flex items-center space-x-2 lg:space-x-3 px-3 lg:px-4 py-1.5 lg:py-2 rounded-full text-sm font-bold shadow-sm text-emerald-800 bg-emerald-200 border-2 border-emerald-300">
+                <span className="w-2.5 h-2.5 lg:w-3 lg:h-3 rounded-full bg-emerald-600 animate-pulse"></span>
+                <span className="text-sm lg:text-base">LIVE</span>
               </div>
             </div>
             
@@ -821,9 +785,12 @@ const TimeTracker = () => {
               <div className="space-y-2 lg:space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-3">
                   <span className="text-sm lg:text-base font-bold text-gray-800 min-w-[70px]">Elapsed:</span>
-                  <span className={`text-lg lg:text-xl font-mono font-bold ${
-                    timer.isTracking ? 'text-emerald-700' : 'text-blue-700'
-                  }`}>{formatTime(timer.currentTime)}</span>
+                  <span className="text-lg lg:text-xl font-mono font-bold text-emerald-700">
+                    {timer.isTracking && timer.startTime 
+                      ? formatTime(Math.floor((new Date().getTime() - timer.startTime.getTime()) / 1000))
+                      : formatTime(timer.currentTime)
+                    }
+                  </span>
                 </div>
                 {timer.startTime && (
                   <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-3">

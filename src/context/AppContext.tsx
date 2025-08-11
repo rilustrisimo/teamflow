@@ -422,8 +422,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     // Calculate precise duration from actual start/end times instead of timer.currentTime
     const durationInMinutes = (now.getTime() - timer.startTime.getTime()) / (1000 * 60)
     
-    // Determine the date - if timer crosses midnight, use start date
-    const entryDate = timer.startTime.toISOString().split('T')[0]
+    // FIXED: Determine the date using local timezone to prevent date shifts
+    // If timer crosses midnight, use start date (local time, not UTC)
+    const startDate = timer.startTime
+    const entryDate = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(startDate.getDate()).padStart(2, '0')}`
     
     try {
       // Check if there's already an entry with the same start time (to prevent duplicates)
