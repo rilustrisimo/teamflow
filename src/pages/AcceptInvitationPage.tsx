@@ -88,61 +88,88 @@ const AcceptInvitationPage = () => {
       return
     }
 
-    try {
-      setLoading(true)
-      setError(null)
+    const attemptSignup = async (retryCount = 0): Promise<void> => {
+      try {
+        setLoading(true)
+        setError(null)
 
-      // Sign up the user
-      console.log('Signing up user with invitation data:', {
-        email: invitation.email,
-        full_name: invitation.full_name,
-        role: invitation.role,
-        company_id: invitation.company_id
-      })
-      
-      const { error: authError, data: authData } = await supabase.auth.signUp({
-        email: invitation.email,
-        password: formData.password,
-        options: {
-          data: {
-            full_name: invitation.full_name,
-            role: invitation.role,
-            company_id: invitation.company_id
+        // Sign up the user
+        console.log('Signing up user with invitation data:', {
+          email: invitation.email,
+          full_name: invitation.full_name,
+          role: invitation.role,
+          company_id: invitation.company_id
+        })
+        
+        const { error: authError, data: authData } = await supabase.auth.signUp({
+          email: invitation.email,
+          password: formData.password,
+          options: {
+            emailRedirectTo: undefined, // Disable email confirmation redirect
+            data: {
+              full_name: invitation.full_name,
+              role: invitation.role,
+              company_id: invitation.company_id,
+              email_confirmed: true // Mark as pre-confirmed since it's from invitation
+            }
           }
+        })
+
+        if (authError) {
+          console.error('Auth signup error:', authError)
+          
+          // Handle specific rate limit error with retry
+          if ((authError.message?.includes('over_email_send_rate_limit') || 
+               authError.message?.includes('429') ||
+               authError.message?.includes('Too Many Requests')) && retryCount < 2) {
+            
+            const waitTime = (retryCount + 1) * 5000 // 5s, 10s wait times
+            setError(`Rate limit reached. Retrying in ${waitTime / 1000} seconds...`)
+            
+            await new Promise(resolve => setTimeout(resolve, waitTime))
+            return attemptSignup(retryCount + 1)
+          }
+          
+          if (authError.message?.includes('over_email_send_rate_limit') || 
+              authError.message?.includes('429') ||
+              authError.message?.includes('Too Many Requests')) {
+            setError('Too many signup attempts. Please wait 10-15 minutes and try again.')
+            return
+          }
+          
+          throw authError
         }
-      })
+        
+        console.log('User signup successful:', authData.user?.id)
+        console.log('User email confirmed:', authData.user?.email_confirmed_at)
 
-      if (authError) {
-        console.error('Auth signup error:', authError)
-        throw authError
+        // Update invitation status
+        await DatabaseService.updateInvitation(invitation.id, {
+          status: 'accepted',
+          accepted_at: new Date().toISOString()
+        })
+
+        // Navigate to dashboard
+        navigate('/dashboard')
+      } catch (err: any) {
+        console.error('Error accepting invitation:', err)
+        
+        // Handle specific error cases
+        if (err.message?.includes('Cannot determine company')) {
+          setError('There was an issue with your invitation. Please contact your administrator or try again.')
+        } else if (err.message?.includes('User already registered')) {
+          setError('An account with this email already exists. Please try signing in instead.')
+        } else if (err.message?.includes('Database error saving new user')) {
+          setError('There was a database error creating your account. Please try again or contact support.')
+        } else {
+          setError(err.message || 'Failed to accept invitation. Please try again.')
+        }
+      } finally {
+        setLoading(false)
       }
-      
-      console.log('User signup successful:', authData.user?.id)
-
-      // Update invitation status
-      await DatabaseService.updateInvitation(invitation.id, {
-        status: 'accepted',
-        accepted_at: new Date().toISOString()
-      })
-
-      // Navigate to dashboard
-      navigate('/dashboard')
-    } catch (err: any) {
-      console.error('Error accepting invitation:', err)
-      
-      // Handle specific error cases
-      if (err.message?.includes('Cannot determine company')) {
-        setError('There was an issue with your invitation. Please contact your administrator or try again.')
-      } else if (err.message?.includes('User already registered')) {
-        setError('An account with this email already exists. Please try signing in instead.')
-      } else if (err.message?.includes('Database error saving new user')) {
-        setError('There was a database error creating your account. Please try again or contact support.')
-      } else {
-        setError(err.message || 'Failed to accept invitation. Please try again.')
-      }
-    } finally {
-      setLoading(false)
     }
+
+    await attemptSignup()
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
