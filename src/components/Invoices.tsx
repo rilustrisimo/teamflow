@@ -65,12 +65,12 @@ const Invoices = () => {
     pdf.setFont('helvetica', 'bold');
     pdf.text(`Period:`, margin, y);
     pdf.setFont('helvetica', 'normal');
-    pdf.text(`${new Date(selectedInvoice.date_range?.start ?? '').toLocaleDateString()} - ${new Date(selectedInvoice.date_range?.end ?? '').toLocaleDateString()}`, margin + 80, y);
+    pdf.text(formatDateRangeSafely(selectedInvoice.date_range?.start, selectedInvoice.date_range?.end), margin + 80, y);
     y += 18;
     pdf.setFont('helvetica', 'bold');
     pdf.text(`Due Date:`, margin, y);
     pdf.setFont('helvetica', 'normal');
-    pdf.text(new Date(selectedInvoice.due_date).toLocaleDateString(), margin + 80, y);
+    pdf.text(formatDateSafely(selectedInvoice.due_date), margin + 80, y);
     y += 30;
 
     // Table header
@@ -123,6 +123,29 @@ const Invoices = () => {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [selectedClient, setSelectedClient] = useState('')
   
+  // FIXED: Helper function to get local date string (YYYY-MM-DD) to prevent timezone issues
+  const getLocalDateString = (date: Date = new Date()): string => {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+  }
+
+  // Helper function to safely format dates, handling empty/invalid values
+  const formatDateSafely = (dateString: string | null | undefined): string => {
+    if (!dateString || dateString.trim() === '') return '-'
+    const date = new Date(dateString)
+    return isNaN(date.getTime()) ? '-' : date.toLocaleDateString()
+  }
+
+  // Helper function to format date range safely
+  const formatDateRangeSafely = (start: string | null | undefined, end: string | null | undefined): string => {
+    const startFormatted = formatDateSafely(start)
+    const endFormatted = formatDateSafely(end)
+    
+    if (startFormatted === '-' && endFormatted === '-') return '-'
+    if (startFormatted === '-') return `- ${endFormatted}`
+    if (endFormatted === '-') return `${startFormatted} -`
+    return `${startFormatted} - ${endFormatted}`
+  }
+
   // Helper function to get current month's start and end dates
   const getCurrentMonthDates = () => {
     const now = new Date()
@@ -133,8 +156,8 @@ const Invoices = () => {
     const endOfMonth = new Date(year, month + 1, 0)
     
     return {
-      start: startOfMonth.toISOString().split('T')[0],
-      end: endOfMonth.toISOString().split('T')[0]
+      start: getLocalDateString(startOfMonth),
+      end: getLocalDateString(endOfMonth)
     }
   }
 
@@ -213,6 +236,7 @@ const Invoices = () => {
     const projectIds = clientProjects.map(p => p.id)
 
     return timeEntries.filter(entry => {
+      // NOTE: Date filtering might have timezone edge cases - entry.date should be in YYYY-MM-DD format
       const entryDate = new Date(entry.date)
       const startDate = new Date(invoiceDateRange.start)
       const endDate = new Date(invoiceDateRange.end)
@@ -311,17 +335,20 @@ const Invoices = () => {
         return
       }
 
-      // Prepare invoice data for invoices table (schema-compliant)
+      // FIXED: Prepare invoice data for invoices table (schema-compliant) - use local dates
       const client_id = client.id
       const invoice_number = `INV-${Date.now()}`
       const status = 'draft'
-      const issue_date = new Date().toISOString().split('T')[0]
-      const due_date = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+      const issue_date = getLocalDateString() // Use local date instead of UTC
+      const due_date = getLocalDateString(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)) // Use local date
       const subtotal = Math.round(totalAmount * 100) / 100
       const tax_amount = 0 // Adjust if you have tax logic
       const total_amount = subtotal + tax_amount
       const notes = undefined // Add notes if needed
       const created_by = currentUser?.user_id || ''
+      // FIXED: Add date range fields for database storage
+      const date_range_start = invoiceDateRange.start
+      const date_range_end = invoiceDateRange.end
 
       // Only pass fields required by the DB (company_id is added by the service)
       const invoiceData = {
@@ -334,7 +361,9 @@ const Invoices = () => {
         tax_amount,
         total_amount,
         notes,
-        created_by
+        created_by,
+        date_range_start,
+        date_range_end
       }
 
       // Items: only description, hours, rate, amount
@@ -505,18 +534,16 @@ const Invoices = () => {
       const backend = invoice as any;
       const clientName = invoice.client_name || backend.client?.name || ''
       const clientEmail = invoice.client_email || backend.client?.email || ''
-      // Try to get date_range from invoice, fallback to null
+      
+      // FIXED: Properly map date_range from backend fields
       let dateRange = invoice.date_range
-      // Acceptable keys for start/end
-      const start = backend.start_date || backend.period_start || backend.periodStart || ''
-      const end = backend.end_date || backend.period_end || backend.periodEnd || ''
-      if (!dateRange && start && end) {
+      if (!dateRange || !dateRange.start || !dateRange.end) {
+        // Try backend field mappings - database uses date_range_start/date_range_end
+        const start = backend.date_range_start || backend.start_date || backend.period_start || backend.periodStart || ''
+        const end = backend.date_range_end || backend.end_date || backend.period_end || backend.periodEnd || ''
         dateRange = { start, end }
       }
-      // If still not valid, fallback to empty strings
-      if (!dateRange || !dateRange.start || !dateRange.end) {
-        dateRange = { start: '', end: '' }
-      }
+      
       // Calculate amount and balance
       const amount = invoice.amount ?? backend.total_amount ?? 0
       const balance = invoice.balance ?? (invoice.status === 'paid' ? 0 : amount)
@@ -757,7 +784,7 @@ const Invoices = () => {
         
         {showFiltered && (startDate || endDate) && (
           <div className="text-xs text-secondary">
-            Filters applied: {startDate && `From ${new Date(startDate).toLocaleDateString()}`} {endDate && `To ${new Date(endDate).toLocaleDateString()}`}
+            Filters applied: {startDate && `From ${formatDateSafely(startDate)}`} {endDate && `To ${formatDateSafely(endDate)}`}
           </div>
         )}
       </div>
@@ -825,27 +852,11 @@ const Invoices = () => {
                     </td>
                     <td className="py-4 px-6">
                       <span className="text-dark-500 text-sm">
-                        {(() => {
-                          const start = invoice.date_range?.start;
-                          const end = invoice.date_range?.end;
-                          const startDate = start ? new Date(start) : null;
-                          const endDate = end ? new Date(end) : null;
-                          const validStart = startDate && !isNaN(startDate.getTime());
-                          const validEnd = endDate && !isNaN(endDate.getTime());
-                          if (validStart && validEnd) {
-                            return `${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()}`;
-                          } else if (validStart) {
-                            return `${startDate.toLocaleDateString()} -`;
-                          } else if (validEnd) {
-                            return `- ${endDate.toLocaleDateString()}`;
-                          } else {
-                            return '-';
-                          }
-                        })()}
+                        {formatDateRangeSafely(invoice.date_range?.start, invoice.date_range?.end)}
                       </span>
                     </td>
                     <td className="py-4 px-6">
-                      <span className="text-dark-500">{new Date(invoice.due_date).toLocaleDateString()}</span>
+                      <span className="text-dark-500">{formatDateSafely(invoice.due_date)}</span>
                     </td>
                     <td className="py-4 px-6">
                       <div className="flex items-center space-x-2">
@@ -1205,12 +1216,12 @@ const Invoices = () => {
                 <div>
                   <h4 className="font-medium text-gray-700 mb-2">Invoice Period</h4>
                   <p className="text-dark-500">
-                    {new Date(selectedInvoice.date_range?.start ?? '').toLocaleDateString()} - {new Date(selectedInvoice.date_range?.end ?? '').toLocaleDateString()}
+                    {formatDateRangeSafely(selectedInvoice.date_range?.start, selectedInvoice.date_range?.end)}
                   </p>
                 </div>
                 <div>
                   <h4 className="font-medium text-gray-700 mb-2">Due Date</h4>
-                  <p className="text-dark-500">{new Date(selectedInvoice.due_date).toLocaleDateString()}</p>
+                  <p className="text-dark-500">{formatDateSafely(selectedInvoice.due_date)}</p>
                 </div>
               </div>
 
